@@ -23,8 +23,8 @@ export default function ExpensesPage() {
     if (!session) return
     try {
       const [expRes, memRes] = await Promise.all([
-        fetch(`/api/expenses?groupId=${session.groupId}`),
-        fetch(`/api/members?groupId=${session.groupId}`),
+        fetch(`/api/expenses?groupId=${session.groupId}`, { cache: 'no-store' }),
+        fetch(`/api/members?groupId=${session.groupId}`, { cache: 'no-store' }),
       ])
       if (expRes.ok) setExpenses(await expRes.json())
       if (memRes.ok) setMembers(await memRes.json())

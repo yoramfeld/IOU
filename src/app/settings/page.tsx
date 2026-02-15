@@ -74,6 +74,7 @@ export default function SettingsPage() {
     }
 
     alert('All transactions have been reset.')
+    router.push('/board')
   }
 
   if (!session || !session.isAdmin) return null
