@@ -27,6 +27,28 @@ export default function SettlePage() {
     }
   }, [session])
 
+  const handleSettle = useCallback(async (transfer: Transfer) => {
+    if (!session) return
+    const res = await fetch('/api/expenses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        groupId: session.groupId,
+        paidBy: transfer.from,
+        amount: transfer.amount,
+        description: `⚡ Settlement: ${transfer.fromName} → ${transfer.toName}`,
+        splitAmong: [transfer.to],
+        enteredBy: session.memberId,
+      }),
+    })
+    if (!res.ok) {
+      const data = await res.json()
+      alert(data.error || 'Failed to record settlement')
+      return
+    }
+    await fetchAndSettle()
+  }, [session, fetchAndSettle])
+
   useEffect(() => {
     if (!loading && !session) {
       router.replace('/')
@@ -59,7 +81,13 @@ export default function SettlePage() {
         {loadingData ? (
           <p className="text-center text-ink-muted py-12">Calculating...</p>
         ) : (
-          <SettlementList transfers={transfers} currency={session.currency} />
+          <SettlementList
+            transfers={transfers}
+            currency={session.currency}
+            currentMemberId={session.memberId}
+            isAdmin={session.isAdmin}
+            onSettle={handleSettle}
+          />
         )}
       </main>
 
