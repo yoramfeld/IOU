@@ -27,7 +27,7 @@ export default function SettlementList({ transfers, currency, currentMemberId, i
 
   const handleSettle = async (transfer: Transfer, index: number) => {
     if (!onSettle) return
-    if (!confirm(`Are you sure you received ${currency}${transfer.amount.toFixed(2)} from ${transfer.fromName}?`)) return
+    if (!confirm(`Make sure you received ${currency}${transfer.amount.toFixed(2)} from ${transfer.fromName} and only then confirm`)) return
     setSettlingIndex(index)
     try {
       await onSettle(transfer)

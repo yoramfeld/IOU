@@ -33,9 +33,6 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
                 <p className="text-xs text-ink-muted">
                   {payer?.name} paid {splitMembers[0]?.name}
                 </p>
-                {onBehalf && enteredBy && (
-                  <p className="text-xs text-ink-muted italic">by {enteredBy.name}</p>
-                )}
               </>
             ) : (
               <>

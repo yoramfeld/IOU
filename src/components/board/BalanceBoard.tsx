@@ -39,7 +39,7 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
                 {b.is_admin && <span className="text-xs text-amber-600 ml-1">admin</span>}
               </p>
               <p className="text-xs text-ink-muted">
-                Paid {currency}{Number(b.total_paid).toFixed(2)} · Owes {currency}{Math.abs(Number(b.total_owed)).toFixed(2)}
+                Paid {currency}{Number(b.total_paid).toFixed(2)} · {b.balance > 0.01 ? 'Owed' : 'Owes'} {currency}{Math.abs(Number(b.total_owed)).toFixed(2)}
               </p>
             </div>
             <div className="text-right shrink-0">
