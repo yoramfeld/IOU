@@ -30,6 +30,12 @@ export function createServiceClient() {
   const { createClient } = require('@supabase/supabase-js')
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      global: {
+        fetch: (url: string, init: RequestInit) =>
+          fetch(url, { ...init, cache: 'no-store' }),
+      },
+    }
   )
 }
