@@ -95,9 +95,9 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { expenseId, adminId } = await request.json()
+  const { expenseId, groupId, adminId, resetAll } = await request.json()
 
-  if (!expenseId || !adminId) {
+  if (!adminId) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   }
 
@@ -112,6 +112,25 @@ export async function DELETE(request: Request) {
 
   if (!admin?.is_admin) {
     return NextResponse.json({ error: 'Only admins can delete expenses' }, { status: 403 })
+  }
+
+  // Reset all expenses for a group
+  if (resetAll && groupId) {
+    const { error } = await supabase
+      .from('expenses')
+      .delete()
+      .eq('group_id', groupId)
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to reset transactions' }, { status: 500 })
+    }
+
+    return NextResponse.json({ ok: true })
+  }
+
+  // Delete single expense
+  if (!expenseId) {
+    return NextResponse.json({ error: 'Missing expenseId' }, { status: 400 })
   }
 
   const { error } = await supabase

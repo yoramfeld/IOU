@@ -53,6 +53,29 @@ export default function SettingsPage() {
     return <div className="phone-frame flex items-center justify-center min-h-dvh text-ink-muted">Loading...</div>
   }
 
+  async function handleReset() {
+    if (!session) return
+    if (!confirm('This will permanently delete ALL expenses and settlements. Balances will be reset to zero. Continue?')) return
+
+    const res = await fetch('/api/expenses', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        groupId: session.groupId,
+        adminId: session.memberId,
+        resetAll: true,
+      }),
+    })
+
+    if (!res.ok) {
+      const data = await res.json()
+      alert(data.error || 'Failed to reset')
+      return
+    }
+
+    alert('All transactions have been reset.')
+  }
+
   if (!session || !session.isAdmin) return null
 
   return (
@@ -71,6 +94,16 @@ export default function SettingsPage() {
 
       <main className="p-4">
         <GroupSettings session={session} onUpdate={handleUpdate} />
+
+        <div className="mt-8 pt-6 border-t border-border">
+          <h2 className="text-sm font-semibold text-red mb-1">Danger zone</h2>
+          <p className="text-xs text-ink-muted mb-3">
+            Delete all expenses and settlements. Members will be kept.
+          </p>
+          <button onClick={handleReset} className="btn bg-red text-white hover:bg-red/90">
+            Reset all transactions
+          </button>
+        </div>
       </main>
 
       <BottomNav active="settings" isAdmin={session.isAdmin} />
