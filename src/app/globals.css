@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    min-height: 100dvh;
+  }
+}
+
+@layer components {
+  .phone-frame {
+    @apply max-w-sm mx-auto min-h-dvh bg-white;
+  }
+
+  .card {
+    @apply bg-white border border-border rounded-xl p-4 shadow-card;
+  }
+
+  .btn {
+    @apply w-full py-3 px-4 rounded-xl font-semibold text-sm transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply bg-accent text-white hover:bg-indigo-600;
+  }
+  .btn-outline {
+    @apply border border-border text-ink-soft hover:bg-surface;
+  }
+  .btn-danger {
+    @apply bg-red text-white hover:bg-red-700;
+  }
+  .btn-sm {
+    @apply py-1.5 px-3 text-xs w-auto;
+  }
+
+  .input {
+    @apply w-full px-4 py-3 rounded-xl border border-border text-sm
+           focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent
+           placeholder:text-ink-muted;
+  }
+
+  .badge {
+    @apply text-xs font-semibold px-2 py-0.5 rounded-full;
+  }
+  .badge-green { @apply bg-green-soft text-green; }
+  .badge-red   { @apply bg-red-soft text-red; }
+}
