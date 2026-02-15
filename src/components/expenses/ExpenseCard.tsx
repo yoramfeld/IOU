@@ -19,6 +19,7 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
     .filter(Boolean) as Member[]
 
   const onBehalf = expense.entered_by !== expense.paid_by
+  const isSettlement = expense.description.startsWith('⚡ Settlement:')
 
   return (
     <div className="card">
@@ -26,13 +27,27 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
         <div className="flex items-center gap-3 min-w-0">
           {payer && <MemberAvatar name={payer.name} />}
           <div className="min-w-0">
-            <p className="font-semibold text-sm truncate">{expense.description}</p>
-            <p className="text-xs text-ink-muted">
-              {payer?.name} paid
-              {onBehalf && enteredBy && (
-                <span className="italic"> (entered by {enteredBy.name})</span>
-              )}
-            </p>
+            {isSettlement ? (
+              <>
+                <p className="font-semibold text-sm">Settlement</p>
+                <p className="text-xs text-ink-muted">
+                  {payer?.name} paid {splitMembers[0]?.name}
+                </p>
+                {onBehalf && enteredBy && (
+                  <p className="text-xs text-ink-muted italic">by {enteredBy.name}</p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="font-semibold text-sm truncate">{expense.description}</p>
+                <p className="text-xs text-ink-muted">
+                  {payer?.name} paid
+                  {onBehalf && enteredBy && (
+                    <span className="italic"> (entered by {enteredBy.name})</span>
+                  )}
+                </p>
+              </>
+            )}
           </div>
         </div>
         <div className="text-right shrink-0">
@@ -47,13 +62,15 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
           )}
         </div>
       </div>
-      <div className="flex gap-1 mt-2 flex-wrap">
-        {splitMembers.map(m => (
-          <span key={m.id} className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full">
-            {m.name}
-          </span>
-        ))}
-      </div>
+      {!isSettlement && (
+        <div className="flex gap-1 mt-2 flex-wrap">
+          {splitMembers.map(m => (
+            <span key={m.id} className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full">
+              {m.name}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

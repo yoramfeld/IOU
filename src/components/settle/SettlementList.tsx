@@ -27,6 +27,7 @@ export default function SettlementList({ transfers, currency, currentMemberId, i
 
   const handleSettle = async (transfer: Transfer, index: number) => {
     if (!onSettle) return
+    if (!confirm(`Are you sure you received ${currency}${transfer.amount.toFixed(2)} from ${transfer.fromName}?`)) return
     setSettlingIndex(index)
     try {
       await onSettle(transfer)
@@ -41,7 +42,7 @@ export default function SettlementList({ transfers, currency, currentMemberId, i
         {transfers.length} transfer{transfers.length !== 1 ? 's' : ''} needed to settle up:
       </p>
       {transfers.map((t, i) => {
-        const canSettle = onSettle && (isAdmin || currentMemberId === t.to)
+        const canSettle = onSettle && currentMemberId === t.to
         return (
           <div key={i} className="card space-y-2">
             <div className="flex items-center gap-3">
