@@ -22,12 +22,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Failed to fetch balances' }, { status: 500 })
   }
 
-  const members = membersRes.data || []
-  const expenses = expensesRes.data || []
+  const members = (membersRes.data || []) as { id: string; name: string; is_admin: boolean; group_id: string }[]
+  const expenses = (expensesRes.data || []) as { id: string; paid_by: string; amount: number }[]
 
   // Get expense IDs for this group to filter splits
-  const expenseIds = new Set(expenses.map(e => e.id))
-  const splits = (splitsRes.data || []).filter(s => expenseIds.has(s.expense_id))
+  const expenseIds = new Set(expenses.map((e: { id: string }) => e.id))
+  const splits = ((splitsRes.data || []) as { member_id: string; amount: number; expense_id: string }[]).filter(s => expenseIds.has(s.expense_id))
 
   // Compute totals per member
   const paidByMember: Record<string, number> = {}
