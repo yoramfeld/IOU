@@ -43,23 +43,25 @@ export default function SettlementList({ transfers, currency, currentMemberId, i
       {transfers.map((t, i) => {
         const canSettle = onSettle && (isAdmin || currentMemberId === t.to)
         return (
-          <div key={i} className="card flex items-center gap-3">
-            <MemberAvatar name={t.fromName} size="sm" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm">
-                <span className="font-semibold">{t.fromName}</span>
-                <span className="text-ink-muted mx-1">→</span>
-                <span className="font-semibold">{t.toName}</span>
+          <div key={i} className="card space-y-2">
+            <div className="flex items-center gap-3">
+              <MemberAvatar name={t.fromName} size="sm" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm">
+                  <span className="font-semibold">{t.fromName}</span>
+                  <span className="text-ink-muted mx-1">→</span>
+                  <span className="font-semibold">{t.toName}</span>
+                </p>
+              </div>
+              <p className="font-bold text-sm text-accent shrink-0">
+                {currency}{t.amount.toFixed(2)}
               </p>
             </div>
-            <p className="font-bold text-sm text-accent shrink-0">
-              {currency}{t.amount.toFixed(2)}
-            </p>
             {canSettle && (
               <button
                 onClick={() => handleSettle(t, i)}
                 disabled={settlingIndex !== null}
-                className="text-xs font-medium px-3 py-1.5 rounded-full bg-accent text-white hover:bg-accent/90 disabled:opacity-50 shrink-0"
+                className="w-full text-xs font-medium px-3 py-1.5 rounded-full bg-accent text-white hover:bg-accent/90 disabled:opacity-50"
               >
                 {settlingIndex === i ? 'Settling...' : 'Mark settled'}
               </button>
