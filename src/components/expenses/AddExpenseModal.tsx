@@ -92,7 +92,6 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
             className="input"
             value={paidBy}
             onChange={e => setPaidBy(e.target.value)}
-            disabled={!isAdmin}
           >
             {members.map(m => (
               <option key={m.id} value={m.id}>
@@ -100,9 +99,6 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
               </option>
             ))}
           </select>
-          {!isAdmin && paidBy !== currentMemberId && (
-            <p className="text-xs text-ink-muted mt-1">Only admins can enter expenses for others</p>
-          )}
         </div>
 
         <div>

@@ -39,20 +39,16 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient()
 
-  // If entered by someone other than payer, verify they're admin or it's a settlement by the lender
+  // Verify enteredBy is a valid member of the group
   if (enteredBy !== paidBy) {
-    const isSettlement = typeof description === 'string' && description.startsWith('⚡ Settlement:')
-    const isLender = isSettlement && splitAmong.includes(enteredBy)
-
-    if (!isLender) {
-      const { data: enterer } = await supabase
-        .from('members')
-        .select('is_admin')
-        .eq('id', enteredBy)
-        .single()
-      if (!enterer?.is_admin) {
-        return NextResponse.json({ error: 'Only admins can enter expenses on behalf of others' }, { status: 403 })
-      }
+    const { data: enterer } = await supabase
+      .from('members')
+      .select('id, group_id')
+      .eq('id', enteredBy)
+      .eq('group_id', groupId)
+      .single()
+    if (!enterer) {
+      return NextResponse.json({ error: 'Not a member of this group' }, { status: 403 })
     }
   }
 
