@@ -49,7 +49,7 @@ export default function SettlePage() {
         alert(msg)
         return
       }
-      await fetchAndSettle()
+      window.location.reload()
     } catch (err) {
       alert(`Settlement error: ${err instanceof Error ? err.message : err}`)
     }
