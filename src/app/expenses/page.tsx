@@ -22,9 +22,10 @@ export default function ExpensesPage() {
   const fetchData = useCallback(async () => {
     if (!session) return
     try {
+      const t = Date.now()
       const [expRes, memRes] = await Promise.all([
-        fetch(`/api/expenses?groupId=${session.groupId}`, { cache: 'no-store' }),
-        fetch(`/api/members?groupId=${session.groupId}`, { cache: 'no-store' }),
+        fetch(`/api/expenses?groupId=${session.groupId}&_t=${t}`),
+        fetch(`/api/members?groupId=${session.groupId}&_t=${t}`),
       ])
       if (expRes.ok) setExpenses(await expRes.json())
       if (memRes.ok) setMembers(await memRes.json())

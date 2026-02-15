@@ -17,7 +17,7 @@ export default function SettlePage() {
   const fetchAndSettle = useCallback(async () => {
     if (!session) return
     try {
-      const res = await fetch(`/api/balances?groupId=${session.groupId}`, { cache: 'no-store' })
+      const res = await fetch(`/api/balances?groupId=${session.groupId}&_t=${Date.now()}`)
       if (res.ok) {
         const balances: MemberBalance[] = await res.json()
         setTransfers(calculateSettlements(balances))

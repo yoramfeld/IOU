@@ -74,7 +74,7 @@ export default function SettingsPage() {
     }
 
     alert('All transactions have been reset.')
-    router.push('/board')
+    window.location.href = '/board'
   }
 
   if (!session || !session.isAdmin) return null

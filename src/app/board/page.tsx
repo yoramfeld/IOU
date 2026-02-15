@@ -19,7 +19,7 @@ export default function BoardPage() {
   const fetchBalances = useCallback(async () => {
     if (!session) return
     try {
-      const res = await fetch(`/api/balances?groupId=${session.groupId}`, { cache: 'no-store' })
+      const res = await fetch(`/api/balances?groupId=${session.groupId}&_t=${Date.now()}`)
       if (res.ok) setBalances(await res.json())
     } finally {
       setLoadingData(false)
