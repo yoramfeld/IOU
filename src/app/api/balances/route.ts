@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 
+export const dynamic = 'force-dynamic'
+
 interface MemberRow { id: string; name: string; is_admin: boolean; group_id: string }
 interface ExpenseRow { id: string; paid_by: string; amount: number; expense_splits: SplitRow[] }
 interface SplitRow { member_id: string; amount: number }

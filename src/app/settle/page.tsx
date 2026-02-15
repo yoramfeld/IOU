@@ -29,24 +29,30 @@ export default function SettlePage() {
 
   const handleSettle = useCallback(async (transfer: Transfer) => {
     if (!session) return
-    const res = await fetch('/api/expenses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        groupId: session.groupId,
-        paidBy: transfer.from,
-        amount: transfer.amount,
-        description: `⚡ Settlement: ${transfer.fromName} → ${transfer.toName}`,
-        splitAmong: [transfer.to],
-        enteredBy: session.memberId,
-      }),
-    })
-    if (!res.ok) {
-      const data = await res.json()
-      alert(data.error || 'Failed to record settlement')
-      return
+    try {
+      const res = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupId: session.groupId,
+          paidBy: transfer.from,
+          amount: transfer.amount,
+          description: `⚡ Settlement: ${transfer.fromName} → ${transfer.toName}`,
+          splitAmong: [transfer.to],
+          enteredBy: session.memberId,
+        }),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        let msg = 'Failed to record settlement'
+        try { msg = JSON.parse(text).error || msg } catch {}
+        alert(msg)
+        return
+      }
+      await fetchAndSettle()
+    } catch (err) {
+      alert(`Settlement error: ${err instanceof Error ? err.message : err}`)
     }
-    await fetchAndSettle()
   }, [session, fetchAndSettle])
 
   useEffect(() => {
