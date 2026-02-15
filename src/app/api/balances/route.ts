@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 
+interface MemberRow { id: string; name: string; is_admin: boolean; group_id: string }
+interface ExpenseRow { id: string; paid_by: string; amount: number; expense_splits: SplitRow[] }
+interface SplitRow { member_id: string; amount: number }
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const groupId = searchParams.get('groupId')
@@ -11,33 +15,30 @@ export async function GET(request: Request) {
 
   const supabase = createServiceClient()
 
-  // Fetch members, expenses, and splits separately to avoid view issues
-  const [membersRes, expensesRes, splitsRes] = await Promise.all([
+  const [membersRes, expensesRes] = await Promise.all([
     supabase.from('members').select('id, name, is_admin, group_id').eq('group_id', groupId),
-    supabase.from('expenses').select('id, paid_by, amount').eq('group_id', groupId),
-    supabase.from('expense_splits').select('member_id, amount, expense_id'),
+    supabase.from('expenses').select('id, paid_by, amount, expense_splits(member_id, amount)').eq('group_id', groupId),
   ])
 
-  if (membersRes.error) {
-    return NextResponse.json({ error: 'Failed to fetch balances' }, { status: 500 })
+  if (membersRes.error || expensesRes.error) {
+    return NextResponse.json({
+      error: 'Failed to fetch balances',
+      details: membersRes.error?.message || expensesRes.error?.message,
+    }, { status: 500 })
   }
 
-  const members = (membersRes.data || []) as { id: string; name: string; is_admin: boolean; group_id: string }[]
-  const expenses = (expensesRes.data || []) as { id: string; paid_by: string; amount: number }[]
-
-  // Get expense IDs for this group to filter splits
-  const expenseIds = new Set(expenses.map((e: { id: string }) => e.id))
-  const splits = ((splitsRes.data || []) as { member_id: string; amount: number; expense_id: string }[]).filter(s => expenseIds.has(s.expense_id))
+  const members = (membersRes.data || []) as MemberRow[]
+  const expenses = (expensesRes.data || []) as ExpenseRow[]
 
   // Compute totals per member
   const paidByMember: Record<string, number> = {}
+  const owedByMember: Record<string, number> = {}
+
   for (const e of expenses) {
     paidByMember[e.paid_by] = (paidByMember[e.paid_by] || 0) + Number(e.amount)
-  }
-
-  const owedByMember: Record<string, number> = {}
-  for (const s of splits) {
-    owedByMember[s.member_id] = (owedByMember[s.member_id] || 0) + Number(s.amount)
+    for (const s of e.expense_splits) {
+      owedByMember[s.member_id] = (owedByMember[s.member_id] || 0) + Number(s.amount)
+    }
   }
 
   const balances = members.map(m => ({
