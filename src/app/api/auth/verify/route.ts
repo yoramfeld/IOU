@@ -30,16 +30,28 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ approved: true })
 }
 
-// GET — Joiner polls to check if their pending verification was approved
+// GET — Joiner polls OR check if any pending verifications exist for a group
 export async function GET(request: NextRequest) {
   const pendingId = request.nextUrl.searchParams.get('pendingId')
   const memberId = request.nextUrl.searchParams.get('memberId')
+  const groupId = request.nextUrl.searchParams.get('groupId')
+
+  const supabase = createServiceClient()
+
+  // Check if any pending verifications exist for a group
+  if (groupId && !pendingId) {
+    const { data } = await supabase
+      .from('pending_verifications')
+      .select('id')
+      .eq('group_id', groupId)
+      .limit(1)
+
+    return NextResponse.json({ hasPending: (data?.length ?? 0) > 0 })
+  }
 
   if (!pendingId || !memberId) {
     return NextResponse.json({ error: 'Missing pendingId or memberId' }, { status: 400 })
   }
-
-  const supabase = createServiceClient()
 
   const { data: pending } = await supabase
     .from('pending_verifications')

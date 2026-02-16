@@ -1,16 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface Props {
   groupId: string
 }
 
 export default function ApproveBar({ groupId }: Props) {
+  const [hasPending, setHasPending] = useState(false)
   const [open, setOpen] = useState(false)
   const [code, setCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
+
+  useEffect(() => {
+    fetch(`/api/auth/verify?groupId=${groupId}`)
+      .then(r => r.json())
+      .then(d => setHasPending(d.hasPending))
+      .catch(() => {})
+  }, [groupId])
 
   async function handleApprove() {
     if (!code.trim()) return
@@ -31,6 +39,7 @@ export default function ApproveBar({ groupId }: Props) {
         setTimeout(() => {
           setMessage(null)
           setOpen(false)
+          setHasPending(false)
         }, 2000)
       } else {
         setMessage({ text: data.error || 'Invalid code', ok: false })
@@ -41,6 +50,8 @@ export default function ApproveBar({ groupId }: Props) {
       setSubmitting(false)
     }
   }
+
+  if (!hasPending) return null
 
   return (
     <div className="w-full max-w-sm mx-auto">
