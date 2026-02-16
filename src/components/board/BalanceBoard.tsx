@@ -22,8 +22,21 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
     )
   }
 
-  // Sort by balance descending: largest lender first, largest debtor last
-  const sorted = [...balances].sort((a, b) => Number(b.balance) - Number(a.balance))
+  // Sort by balance ascending, then name ascending
+  const sorted = [...balances].sort((a, b) => {
+    const diff = Number(a.balance) - Number(b.balance)
+    return diff !== 0 ? diff : a.name.localeCompare(b.name)
+  })
+
+  // Find negative balances that are shared by multiple users
+  const negCounts: Record<string, number> = {}
+  for (const b of sorted) {
+    const bal = Number(b.balance)
+    if (bal < -0.01) {
+      const key = bal.toFixed(2)
+      negCounts[key] = (negCounts[key] || 0) + 1
+    }
+  }
 
   return (
     <div className="space-y-2">
@@ -32,12 +45,14 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
         const isPositive = bal > 0.01
         const isNegative = bal < -0.01
         const isMe = b.id === currentMemberId
+        const isSharedDebt = isNegative && (negCounts[bal.toFixed(2)] ?? 0) > 1
 
         return (
           <div key={b.id} className={clsx(
             'card flex items-center gap-3',
             isMe && 'ring-2 ring-accent/20',
             isPositive && 'bg-green/5',
+            isSharedDebt && 'bg-red/5 ring-1 ring-red/20',
           )}>
             <MemberAvatar name={b.name} />
             <div className="flex-1 min-w-0">
