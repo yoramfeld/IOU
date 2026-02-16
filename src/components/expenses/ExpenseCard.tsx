@@ -21,6 +21,8 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
 
   const onBehalf = expense.entered_by !== expense.paid_by
   const isSettlement = expense.description.startsWith('⚡ Settlement:')
+  const dt = new Date(expense.created_at)
+  const dateStr = `${dt.getDate()}/${dt.getMonth() + 1} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
 
   return (
     <div className="card">
@@ -65,15 +67,18 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
           )}
         </div>
       </div>
-      {!isSettlement && (
-        <div className="flex gap-1 mt-2 flex-wrap">
-          {splitMembers.map(m => (
-            <span key={m.id} className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full">
-              {m.name}
-            </span>
-          ))}
-        </div>
-      )}
+      <div className="flex items-end justify-between mt-2 gap-2">
+        <p className="text-xs text-ink-muted">{dateStr}</p>
+        {!isSettlement && (
+          <div className="flex gap-1 flex-wrap justify-end">
+            {splitMembers.map(m => (
+              <span key={m.id} className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full">
+                {m.name}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
