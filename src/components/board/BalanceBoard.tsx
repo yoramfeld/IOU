@@ -22,15 +22,23 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
     )
   }
 
+  // Sort by balance descending: largest lender first, largest debtor last
+  const sorted = [...balances].sort((a, b) => Number(b.balance) - Number(a.balance))
+
   return (
     <div className="space-y-2">
-      {balances.map(b => {
-        const isPositive = b.balance > 0.01
-        const isNegative = b.balance < -0.01
+      {sorted.map(b => {
+        const bal = Number(b.balance)
+        const isPositive = bal > 0.01
+        const isNegative = bal < -0.01
         const isMe = b.id === currentMemberId
 
         return (
-          <div key={b.id} className={clsx('card flex items-center gap-3', isMe && 'ring-2 ring-accent/20')}>
+          <div key={b.id} className={clsx(
+            'card flex items-center gap-3',
+            isMe && 'ring-2 ring-accent/20',
+            isPositive && 'bg-green/5',
+          )}>
             <MemberAvatar name={b.name} />
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-sm truncate">
@@ -39,7 +47,15 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
                 {b.is_admin && <span className="text-xs text-amber-600 ml-1">admin</span>}
               </p>
               <p className="text-xs text-ink-muted">
-                Paid {currency}{Number(b.total_paid).toFixed(2)} · {b.balance > 0.01 ? 'Owed' : 'Owes'} {currency}{Math.abs(Number(b.total_owed)).toFixed(2)}
+                Paid {currency}{Number(b.total_paid).toFixed(2)}
+              </p>
+              <p className={clsx(
+                'text-xs font-medium',
+                isPositive && 'text-green',
+                isNegative && 'text-red',
+                !isPositive && !isNegative && 'text-ink-muted'
+              )}>
+                {isPositive ? 'Owed' : 'Owes'} {currency}{Math.abs(Number(b.total_owed)).toFixed(2)}
               </p>
             </div>
             <div className="text-right shrink-0">
@@ -49,7 +65,7 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
                 isNegative && 'text-red',
                 !isPositive && !isNegative && 'text-ink-muted'
               )}>
-                {isPositive ? '+' : ''}{currency}{Number(b.balance).toFixed(2)}
+                {isPositive ? '+' : ''}{currency}{bal.toFixed(2)}
               </p>
               {isAdmin && onRemoveMember && b.id !== currentMemberId && (
                 <button

@@ -114,7 +114,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                   onChange={() => toggleMember(m.id)}
                   className="w-4 h-4"
                 />
-                <span className="text-sm">{m.name}</span>
+                <span className="text-sm">{m.name}{m.id === currentMemberId ? ' (you)' : ''}</span>
               </label>
             ))}
           </div>

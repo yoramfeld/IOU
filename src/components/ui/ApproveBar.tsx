@@ -47,12 +47,12 @@ export default function ApproveBar({ groupId }: Props) {
       {!open ? (
         <button
           onClick={() => setOpen(true)}
-          className="w-full py-1.5 text-xs font-medium text-accent bg-accent/10 hover:bg-accent/15 transition-colors"
+          className="w-full py-2.5 text-sm font-semibold text-white bg-accent hover:bg-accent/90 transition-colors"
         >
           Approve a friend
         </button>
       ) : (
-        <div className="bg-accent/10 px-4 py-3 space-y-2">
+        <div className="bg-accent/15 px-4 py-3 space-y-2">
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -62,24 +62,25 @@ export default function ApproveBar({ groupId }: Props) {
               placeholder="3-digit code"
               value={code}
               onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 3))}
-              className="flex-1 bg-white border border-border rounded-lg px-3 py-1.5 text-sm text-center font-mono tracking-widest"
+              className="flex-1 bg-white border border-border rounded-lg px-3 py-2 text-base text-center font-mono tracking-widest"
+              autoFocus
             />
             <button
               onClick={handleApprove}
               disabled={submitting || code.length !== 3}
-              className="px-3 py-1.5 bg-accent text-white text-sm font-semibold rounded-lg disabled:opacity-50"
+              className="px-4 py-2 bg-accent text-white text-sm font-semibold rounded-lg disabled:opacity-50"
             >
               {submitting ? '...' : 'Confirm'}
             </button>
             <button
               onClick={() => { setOpen(false); setCode(''); setMessage(null) }}
-              className="text-ink-muted text-sm px-1"
+              className="text-ink-muted text-lg px-1"
             >
               ✕
             </button>
           </div>
           {message && (
-            <p className={`text-xs text-center ${message.ok ? 'text-green' : 'text-red'}`}>
+            <p className={`text-sm text-center font-medium ${message.ok ? 'text-green' : 'text-red'}`}>
               {message.text}
             </p>
           )}
