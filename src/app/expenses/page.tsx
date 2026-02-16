@@ -103,9 +103,6 @@ export default function ExpensesPage() {
             <h1 className="font-bold text-lg">{session.groupName}</h1>
             <p className="text-xs text-ink-muted">
               {session.name}
-              <button onClick={logout} className="ml-2 text-accent hover:underline">
-                Not you?
-              </button>
             </p>
           </div>
           <button

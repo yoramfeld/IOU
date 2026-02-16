@@ -50,7 +50,7 @@ export default function SettlementList({ transfers, currency, currentMemberId, i
               <div className="flex-1 min-w-0">
                 <p className="text-sm">
                   <span className="font-semibold">{t.fromName}</span>
-                  <span className="text-ink-muted mx-1">→</span>
+                  <span className="mx-1 text-base font-bold text-accent">→</span>
                   <span className="font-semibold">{t.toName}</span>
                 </p>
               </div>

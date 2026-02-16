@@ -76,9 +76,6 @@ export default function SettlePage() {
           <h1 className="font-bold text-lg">Settle Up</h1>
           <p className="text-xs text-ink-muted">
             {session.name}
-            <button onClick={logout} className="ml-2 text-accent hover:underline">
-              Not you?
-            </button>
           </p>
         </div>
       </header>

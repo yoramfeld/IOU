@@ -58,9 +58,6 @@ export default function BoardPage() {
             <h1 className="font-bold text-lg">Balance Board</h1>
             <p className="text-xs text-ink-muted">
               {session.name}
-              <button onClick={logout} className="ml-2 text-accent hover:underline">
-                Not you?
-              </button>
             </p>
           </div>
         </div>
