@@ -21,14 +21,9 @@ export default function BottomNav({ active, isAdmin, groupId }: Props) {
   const items = NAV.filter((n) => !n.adminOnly || isAdmin)
 
   return (
-    <>
-      {groupId && (
-        <div className="fixed bottom-[calc(3rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-full max-w-sm z-20">
-          <ApproveBar groupId={groupId} />
-        </div>
-      )}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm
-                      bg-white border-t border-border flex items-center z-20 pb-safe">
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm z-20">
+      {groupId && <ApproveBar groupId={groupId} />}
+      <nav className="bg-white border-t border-border flex items-center pb-safe">
         {items.map((item) => (
           <Link
             key={item.key}
@@ -43,6 +38,6 @@ export default function BottomNav({ active, isAdmin, groupId }: Props) {
           </Link>
         ))}
       </nav>
-    </>
+    </div>
   )
 }

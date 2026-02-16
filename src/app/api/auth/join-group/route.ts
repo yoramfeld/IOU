@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Group not found. Check the code and try again.' }, { status: 401 })
   }
 
-  // Check name uniqueness within group
+  // Check if name already exists in this group
   const { data: existing } = await supabase
     .from('members')
     .select('id')
@@ -29,57 +29,53 @@ export async function POST(request: Request) {
     .ilike('name', memberName.trim())
     .single()
 
+  let memberId: string
+
   if (existing) {
-    // Name exists → start P2P verification flow
-    const code = String(Math.floor(100 + Math.random() * 900)) // 100–999
-
-    // Remove any stale pending verifications for this member
-    await supabase
-      .from('pending_verifications')
-      .delete()
-      .eq('member_id', existing.id)
-
-    const { data: pending, error: pendingErr } = await supabase
-      .from('pending_verifications')
-      .insert({ group_id: group.id, member_id: existing.id, code })
+    // Re-pairing: use the existing member
+    memberId = existing.id
+  } else {
+    // New member: create them first
+    const { data: member, error: memberErr } = await supabase
+      .from('members')
+      .insert({ group_id: group.id, name: memberName.trim() })
       .select('id')
       .single()
 
-    if (pendingErr) {
-      return NextResponse.json({ error: 'Failed to start verification' }, { status: 500 })
+    if (memberErr) {
+      return NextResponse.json({ error: 'Failed to join group' }, { status: 500 })
     }
-
-    return NextResponse.json({
-      needsVerification: true,
-      pendingId: pending.id,
-      memberId: existing.id,
-      code,
-      memberName: memberName.trim(),
-      groupId: group.id,
-      groupName: group.name,
-      groupCode: group.code,
-      currency: group.currency,
-    })
+    memberId = member.id
   }
 
-  // Create member
-  const { data: member, error: memberErr } = await supabase
-    .from('members')
-    .insert({ group_id: group.id, name: memberName.trim() })
-    .select('id, name, is_admin')
+  // Always require P2P verification
+  const code = String(Math.floor(100 + Math.random() * 900)) // 100–999
+
+  // Remove any stale pending verifications for this member
+  await supabase
+    .from('pending_verifications')
+    .delete()
+    .eq('member_id', memberId)
+
+  const { data: pending, error: pendingErr } = await supabase
+    .from('pending_verifications')
+    .insert({ group_id: group.id, member_id: memberId, code })
+    .select('id')
     .single()
 
-  if (memberErr) {
-    return NextResponse.json({ error: 'Failed to join group' }, { status: 500 })
+  if (pendingErr) {
+    return NextResponse.json({ error: 'Failed to start verification' }, { status: 500 })
   }
 
   return NextResponse.json({
+    needsVerification: true,
+    pendingId: pending.id,
+    memberId,
+    code,
+    memberName: memberName.trim(),
     groupId: group.id,
     groupName: group.name,
     groupCode: group.code,
     currency: group.currency,
-    memberId: member.id,
-    name: member.name,
-    isAdmin: member.is_admin,
   })
 }
