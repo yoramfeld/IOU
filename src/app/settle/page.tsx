@@ -97,7 +97,7 @@ export default function SettlePage() {
         )}
       </main>
 
-      <BottomNav active="settle" isAdmin={session.isAdmin} />
+      <BottomNav active="settle" isAdmin={session.isAdmin} groupId={session.groupId} />
     </div>
   )
 }

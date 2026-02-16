@@ -85,7 +85,7 @@ export default function BoardPage() {
         )}
       </main>
 
-      <BottomNav active="board" isAdmin={session.isAdmin} />
+      <BottomNav active="board" isAdmin={session.isAdmin} groupId={session.groupId} />
     </div>
   )
 }

@@ -107,7 +107,7 @@ export default function SettingsPage() {
         </div>
       </main>
 
-      <BottomNav active="settings" isAdmin={session.isAdmin} />
+      <BottomNav active="settings" isAdmin={session.isAdmin} groupId={session.groupId} />
     </div>
   )
 }

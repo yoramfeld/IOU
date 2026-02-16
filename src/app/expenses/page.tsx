@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
 import { useAdminMode } from '@/hooks/useAdminMode'
@@ -70,6 +70,25 @@ export default function ExpensesPage() {
     await fetchData()
   }
 
+  // Compute payer's running balance per expense (oldest → newest)
+  const payerBalances = useMemo(() => {
+    const map: Record<string, number> = {}
+    const balances: Record<string, number> = {} // memberId → running balance
+
+    // Expenses are newest-first, iterate in reverse for oldest-first
+    for (let i = expenses.length - 1; i >= 0; i--) {
+      const exp = expenses[i]
+      // Payer gains the full amount
+      balances[exp.paid_by] = (balances[exp.paid_by] || 0) + Number(exp.amount)
+      // Each split member loses their share
+      for (const s of exp.splits) {
+        balances[s.member_id] = (balances[s.member_id] || 0) + Number(s.amount) // amount is negative
+      }
+      map[exp.id] = Math.round((balances[exp.paid_by] || 0) * 100) / 100
+    }
+    return map
+  }, [expenses])
+
   if (loading || !adminLoaded) {
     return <div className="phone-frame flex items-center justify-center min-h-dvh text-ink-muted">Loading...</div>
   }
@@ -113,6 +132,7 @@ export default function ExpensesPage() {
             currency={session.currency}
             isAdmin={session.isAdmin && adminMode}
             onDelete={handleDelete}
+            payerBalances={payerBalances}
           />
         )}
       </main>
@@ -128,7 +148,7 @@ export default function ExpensesPage() {
         />
       )}
 
-      <BottomNav active="expenses" isAdmin={session.isAdmin} />
+      <BottomNav active="expenses" isAdmin={session.isAdmin} groupId={session.groupId} />
     </div>
   )
 }

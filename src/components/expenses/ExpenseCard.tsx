@@ -9,9 +9,10 @@ interface Props {
   currency: string
   isAdmin?: boolean
   onDelete?: (id: string) => void
+  payerBalance?: number
 }
 
-export default function ExpenseCard({ expense, members, currency, isAdmin, onDelete }: Props) {
+export default function ExpenseCard({ expense, members, currency, isAdmin, onDelete, payerBalance }: Props) {
   const payer = members.find(m => m.id === expense.paid_by)
   const enteredBy = members.find(m => m.id === expense.entered_by)
   const splitMembers = expense.splits
@@ -67,6 +68,11 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
             </span>
           ))}
         </div>
+      )}
+      {payerBalance !== undefined && (
+        <p className={`text-xs mt-1 font-medium ${payerBalance >= 0 ? 'text-green' : 'text-red'}`}>
+          Balance: {currency}{payerBalance.toFixed(2)}
+        </p>
       )}
     </div>
   )

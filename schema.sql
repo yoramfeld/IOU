@@ -50,6 +50,15 @@ select
     + coalesce((select sum(es.amount) from expense_splits es where es.member_id = m.id), 0) as balance
 from members m;
 
+-- Pending verifications (P2P device pairing)
+create table pending_verifications (
+  id          uuid primary key default uuid_generate_v4(),
+  group_id    uuid not null references groups(id) on delete cascade,
+  member_id   uuid not null references members(id) on delete cascade,
+  code        text not null,
+  created_at  timestamptz not null default now()
+);
+
 -- RLS
 alter table groups enable row level security;
 alter table members enable row level security;
@@ -63,3 +72,6 @@ create policy "service write" on groups for all using (true) with check (true);
 create policy "service write" on members for all using (true) with check (true);
 create policy "service write" on expenses for all using (true) with check (true);
 create policy "service write" on expense_splits for all using (true) with check (true);
+alter table pending_verifications enable row level security;
+create policy "public read" on pending_verifications for select using (true);
+create policy "service write" on pending_verifications for all using (true) with check (true);

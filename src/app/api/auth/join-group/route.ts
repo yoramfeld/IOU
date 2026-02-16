@@ -30,10 +30,36 @@ export async function POST(request: Request) {
     .single()
 
   if (existing) {
-    return NextResponse.json(
-      { error: `"${memberName.trim()}" is already taken in this group. Try adding a last initial.` },
-      { status: 409 }
-    )
+    // Name exists → start P2P verification flow
+    const code = String(Math.floor(100 + Math.random() * 900)) // 100–999
+
+    // Remove any stale pending verifications for this member
+    await supabase
+      .from('pending_verifications')
+      .delete()
+      .eq('member_id', existing.id)
+
+    const { data: pending, error: pendingErr } = await supabase
+      .from('pending_verifications')
+      .insert({ group_id: group.id, member_id: existing.id, code })
+      .select('id')
+      .single()
+
+    if (pendingErr) {
+      return NextResponse.json({ error: 'Failed to start verification' }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      needsVerification: true,
+      pendingId: pending.id,
+      memberId: existing.id,
+      code,
+      memberName: memberName.trim(),
+      groupId: group.id,
+      groupName: group.name,
+      groupCode: group.code,
+      currency: group.currency,
+    })
   }
 
   // Create member

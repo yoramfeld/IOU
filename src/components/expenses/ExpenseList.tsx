@@ -9,9 +9,10 @@ interface Props {
   currency: string
   isAdmin?: boolean
   onDelete?: (id: string) => void
+  payerBalances?: Record<string, number>
 }
 
-export default function ExpenseList({ expenses, members, currency, isAdmin, onDelete }: Props) {
+export default function ExpenseList({ expenses, members, currency, isAdmin, onDelete, payerBalances }: Props) {
   if (expenses.length === 0) {
     return (
       <div className="text-center py-12 text-ink-muted">
@@ -32,6 +33,7 @@ export default function ExpenseList({ expenses, members, currency, isAdmin, onDe
           currency={currency}
           isAdmin={isAdmin}
           onDelete={onDelete}
+          payerBalance={payerBalances?.[expense.id]}
         />
       ))}
     </div>

@@ -2,10 +2,12 @@
 
 import Link from 'next/link'
 import clsx from 'clsx'
+import ApproveBar from './ApproveBar'
 
 interface Props {
   active: 'expenses' | 'board' | 'settle' | 'settings'
   isAdmin?: boolean
+  groupId?: string
 }
 
 const NAV = [
@@ -15,25 +17,32 @@ const NAV = [
   { key: 'settings', href: '/settings', label: 'Settings', icon: '⚙️', adminOnly: true },
 ]
 
-export default function BottomNav({ active, isAdmin }: Props) {
+export default function BottomNav({ active, isAdmin, groupId }: Props) {
   const items = NAV.filter((n) => !n.adminOnly || isAdmin)
 
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm
-                    bg-white border-t border-border flex items-center z-20 pb-safe">
-      {items.map((item) => (
-        <Link
-          key={item.key}
-          href={item.href}
-          className={clsx(
-            'flex-1 flex flex-col items-center py-3 text-xs font-semibold transition-colors',
-            active === item.key ? 'text-accent' : 'text-ink-muted hover:text-ink-soft'
-          )}
-        >
-          <span className="text-lg mb-0.5">{item.icon}</span>
-          {item.label}
-        </Link>
-      ))}
-    </nav>
+    <>
+      {groupId && (
+        <div className="fixed bottom-[calc(3rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 w-full max-w-sm z-20">
+          <ApproveBar groupId={groupId} />
+        </div>
+      )}
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm
+                      bg-white border-t border-border flex items-center z-20 pb-safe">
+        {items.map((item) => (
+          <Link
+            key={item.key}
+            href={item.href}
+            className={clsx(
+              'flex-1 flex flex-col items-center py-3 text-xs font-semibold transition-colors',
+              active === item.key ? 'text-accent' : 'text-ink-muted hover:text-ink-soft'
+            )}
+          >
+            <span className="text-lg mb-0.5">{item.icon}</span>
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+    </>
   )
 }

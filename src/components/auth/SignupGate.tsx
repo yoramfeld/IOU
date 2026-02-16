@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useSession } from '@/hooks/useSession'
+import { useSession, type VerificationData } from '@/hooks/useSession'
 
 const CURRENCIES = [
   { symbol: '€', label: 'Euro (€)' },
@@ -15,11 +15,11 @@ const CURRENCIES = [
   { symbol: 'R$', label: 'Real (R$)' },
 ]
 
-type Step = 'choose' | 'create' | 'join' | 'show-code'
+type Step = 'choose' | 'create' | 'join' | 'show-code' | 'verify-wait'
 
 export default function SignupGate() {
   const router = useRouter()
-  const { createGroup, joinGroup } = useSession()
+  const { createGroup, joinGroup, claimSession } = useSession()
   const [step, setStep] = useState<Step>('choose')
   const [groupName, setGroupName] = useState('')
   const [currency, setCurrency] = useState('€')
@@ -28,6 +28,7 @@ export default function SignupGate() {
   const [joinCode, setJoinCode] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [verification, setVerification] = useState<VerificationData | null>(null)
 
   async function handleCreate() {
     if (!groupName.trim() || !memberName.trim()) return
@@ -50,6 +51,13 @@ export default function SignupGate() {
     const result = await joinGroup(joinCode.trim().toLowerCase(), memberName.trim())
     if (result.ok) {
       router.push('/expenses')
+    } else if (result.verification) {
+      setVerification(result.verification)
+      setStep('verify-wait')
+      // Start polling — auto-redirect on approval
+      claimSession(result.verification).then(() => {
+        router.push('/expenses')
+      })
     } else {
       setError(result.error || 'Failed to join')
     }
@@ -160,6 +168,33 @@ export default function SignupGate() {
             </button>
             <button onClick={() => { setStep('choose'); setError('') }} className="btn btn-outline">
               Back
+            </button>
+          </div>
+        )}
+
+        {step === 'verify-wait' && verification && (
+          <div className="space-y-4 text-center">
+            <h2 className="text-lg font-semibold">Verify your identity</h2>
+            <p className="text-sm text-ink-soft">
+              Tell a friend in <strong>{verification.groupName}</strong> your code:
+            </p>
+            <div className="bg-surface border border-border rounded-xl p-6">
+              <p className="text-5xl font-mono font-bold tracking-widest text-accent">
+                {verification.code}
+              </p>
+            </div>
+            <p className="text-xs text-ink-muted">
+              They can approve you from the &ldquo;Approve a friend&rdquo; bar in the app.
+            </p>
+            <div className="flex items-center justify-center gap-2 text-ink-muted text-sm">
+              <span className="inline-block w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              Waiting for approval...
+            </div>
+            <button
+              onClick={() => { setStep('join'); setVerification(null); setError('') }}
+              className="btn btn-outline"
+            >
+              Cancel
             </button>
           </div>
         )}
