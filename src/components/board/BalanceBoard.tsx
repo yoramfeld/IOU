@@ -28,15 +28,12 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
     return diff !== 0 ? diff : a.name.localeCompare(b.name)
   })
 
-  // Find negative balances that are shared by multiple users
-  const negCounts: Record<string, number> = {}
-  for (const b of sorted) {
-    const bal = Number(b.balance)
-    if (bal < -0.01) {
-      const key = bal.toFixed(2)
-      negCounts[key] = (negCounts[key] || 0) + 1
-    }
-  }
+  // Find the lowest (most negative) balance — highlight all members who share it
+  const minBal = sorted.length > 0 ? Number(sorted[0].balance) : 0
+  const minBalKey = minBal < -0.01 ? minBal.toFixed(2) : null
+  const minCount = minBalKey
+    ? sorted.filter(b => Number(b.balance).toFixed(2) === minBalKey).length
+    : 0
 
   return (
     <div className="space-y-2">
@@ -45,14 +42,14 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
         const isPositive = bal > 0.01
         const isNegative = bal < -0.01
         const isMe = b.id === currentMemberId
-        const isSharedDebt = isNegative && (negCounts[bal.toFixed(2)] ?? 0) > 1
+        const isTopDebtor = minBalKey !== null && bal.toFixed(2) === minBalKey
 
         return (
           <div key={b.id} className={clsx(
             'card flex items-center gap-3',
             isMe && 'ring-2 ring-accent/20',
             isPositive && 'bg-green/5',
-            isSharedDebt && 'bg-red/5 ring-1 ring-red/20',
+            isTopDebtor && 'bg-red/5 ring-1 ring-red/20',
           )}>
             <MemberAvatar name={b.name} />
             <div className="flex-1 min-w-0">

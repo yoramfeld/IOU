@@ -50,6 +50,11 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
         </div>
         <div className="text-right shrink-0">
           <p className="font-bold text-sm">{currency}{Number(expense.amount).toFixed(2)}</p>
+          {payerBalance !== undefined && (
+            <p className={`text-xs font-medium ${payerBalance >= 0 ? 'text-green' : 'text-red'}`}>
+              {payerBalance >= 0 ? '+' : ''}{currency}{payerBalance.toFixed(2)}
+            </p>
+          )}
           {isAdmin && onDelete && (
             <button
               onClick={() => onDelete(expense.id)}
@@ -68,11 +73,6 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
             </span>
           ))}
         </div>
-      )}
-      {payerBalance !== undefined && (
-        <p className={`text-xs mt-1 font-medium ${payerBalance >= 0 ? 'text-green' : 'text-red'}`}>
-          Balance: {currency}{payerBalance.toFixed(2)}
-        </p>
       )}
     </div>
   )
