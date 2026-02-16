@@ -58,17 +58,6 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
                 {isMe && <span className="text-xs text-ink-muted ml-1">(you)</span>}
                 {b.is_admin && <span className="text-xs text-amber-600 ml-1">admin</span>}
               </p>
-              <p className="text-xs text-ink-muted">
-                Paid {currency}{Number(b.total_paid).toFixed(2)}
-              </p>
-              <p className={clsx(
-                'text-xs font-medium',
-                isPositive && 'text-green',
-                isNegative && 'text-red',
-                !isPositive && !isNegative && 'text-ink-muted'
-              )}>
-                {isPositive ? '+' : '-'}{currency}{Math.abs(Number(b.total_owed)).toFixed(2)}
-              </p>
             </div>
             <div className="text-right shrink-0">
               <p className={clsx(
