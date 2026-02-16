@@ -55,7 +55,7 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
                 isNegative && 'text-red',
                 !isPositive && !isNegative && 'text-ink-muted'
               )}>
-                Owes {currency}{Math.abs(Number(b.total_owed)).toFixed(2)}
+                {isPositive ? '+' : '-'}{currency}{Math.abs(Number(b.total_owed)).toFixed(2)}
               </p>
             </div>
             <div className="text-right shrink-0">

@@ -77,6 +77,25 @@ export default function SettingsPage() {
     window.location.href = '/board'
   }
 
+  async function handleClearPending() {
+    if (!session) return
+    if (!confirm('Clear all pending join requests? Users waiting for approval will need to try again.')) return
+
+    const res = await fetch('/api/auth/verify', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId: session.groupId, adminId: session.memberId }),
+    })
+
+    if (!res.ok) {
+      const data = await res.json()
+      alert(data.error || 'Failed to clear')
+      return
+    }
+
+    alert('Pending requests cleared.')
+  }
+
   if (!session || !session.isAdmin) return null
 
   return (
@@ -95,6 +114,17 @@ export default function SettingsPage() {
 
       <main className="p-4">
         <GroupSettings session={session} onUpdate={handleUpdate} />
+
+        <div className="mt-8 pt-6 border-t border-border space-y-4">
+          <div>
+            <p className="text-xs text-ink-muted mb-2">
+              Clear stale join requests that are showing the &ldquo;Approve a friend&rdquo; bar.
+            </p>
+            <button onClick={handleClearPending} className="btn btn-outline">
+              Clear pending requests
+            </button>
+          </div>
+        </div>
 
         <div className="mt-8 pt-6 border-t border-border">
           <h2 className="text-sm font-semibold text-red mb-1">Danger zone</h2>

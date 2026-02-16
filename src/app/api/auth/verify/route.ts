@@ -95,3 +95,31 @@ export async function GET(request: NextRequest) {
     isAdmin: member.is_admin,
   })
 }
+
+// DELETE — Admin clears all pending verifications for a group
+export async function DELETE(request: NextRequest) {
+  const { groupId, adminId } = await request.json()
+
+  if (!groupId || !adminId) {
+    return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  }
+
+  const supabase = createServiceClient()
+
+  const { data: admin } = await supabase
+    .from('members')
+    .select('is_admin, group_id')
+    .eq('id', adminId)
+    .single()
+
+  if (!admin?.is_admin || admin.group_id !== groupId) {
+    return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  }
+
+  await supabase
+    .from('pending_verifications')
+    .delete()
+    .eq('group_id', groupId)
+
+  return NextResponse.json({ ok: true })
+}
