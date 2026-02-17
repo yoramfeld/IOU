@@ -43,7 +43,7 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
                 <p className="text-xs text-ink-muted">
                   {payer?.name} paid and now at
                   {onBehalf && enteredBy && (
-                    <span className="italic"> (entered by {enteredBy.name})</span>
+                    <><br /><span className="italic">(entered by {enteredBy.name})</span></>
                   )}
                 </p>
               </>
