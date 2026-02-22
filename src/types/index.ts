@@ -52,6 +52,11 @@ export interface MemberSession {
   isAdmin: boolean
 }
 
+export interface NameCollisionData {
+  groupName: string
+  memberName: string
+}
+
 export interface Transfer {
   from: string
   fromName: string

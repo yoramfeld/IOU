@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getSession, setSession, clearSession } from '@/lib/session'
-import type { MemberSession } from '@/types'
+import type { MemberSession, NameCollisionData } from '@/types'
+
+export type { NameCollisionData }
 
 export interface VerificationData {
   pendingId: string
@@ -28,11 +30,11 @@ export function useSession() {
     }
   }, [])
 
-  async function createGroup(groupName: string, currency: string, memberName: string): Promise<MemberSession | null> {
+  async function createGroup(groupName: string, currency: string, memberName: string, adminPassword?: string): Promise<MemberSession | null> {
     const res = await fetch('/api/auth/create-group', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupName, currency, memberName }),
+      body: JSON.stringify({ groupName, currency, memberName, adminPassword }),
     })
     if (!res.ok) return null
     const data = await res.json()
@@ -51,16 +53,39 @@ export function useSession() {
     return s
   }
 
-  async function joinGroup(groupCode: string, memberName: string): Promise<{ ok: boolean; error?: string; verification?: VerificationData }> {
+  async function joinGroup(
+    groupCode: string,
+    memberName: string,
+    options?: { confirmExisting?: boolean; adminPassword?: string }
+  ): Promise<{ ok: boolean; error?: string; verification?: VerificationData; collision?: NameCollisionData }> {
     const res = await fetch('/api/auth/join-group', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupCode, memberName }),
+      body: JSON.stringify({ groupCode, memberName, ...options }),
     })
     const data = await res.json()
 
-    if (!res.ok && !data.needsVerification) {
+    if (!res.ok && !data.nameCollision && !data.directLogin) {
       return { ok: false, error: data.error || 'Failed to join group' }
+    }
+
+    if (data.nameCollision) {
+      return { ok: false, collision: { groupName: data.groupName, memberName: data.memberName } }
+    }
+
+    if (data.directLogin) {
+      const s: MemberSession = {
+        groupId: data.groupId,
+        groupName: data.groupName,
+        groupCode: data.groupCode,
+        currency: data.currency,
+        memberId: data.memberId,
+        name: data.memberName,
+        isAdmin: data.isAdmin,
+      }
+      setSession(s)
+      setSessionState(s)
+      return { ok: true }
     }
 
     if (data.needsVerification) {

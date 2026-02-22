@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { generateGroupCode } from '@/lib/groupCode'
+import bcrypt from 'bcryptjs'
 
 export async function POST(request: Request) {
-  const { groupName, currency, memberName } = await request.json()
+  const { groupName, currency, memberName, adminPassword } = await request.json()
 
   if (!groupName?.trim() || !memberName?.trim()) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
@@ -23,10 +24,12 @@ export async function POST(request: Request) {
     if (!existing) break
   }
 
+  const hash = adminPassword?.trim() ? await bcrypt.hash(adminPassword.trim(), 10) : null
+
   // Create group
   const { data: group, error: groupErr } = await supabase
     .from('groups')
-    .insert({ name: groupName.trim(), code, currency: currency || '€' })
+    .insert({ name: groupName.trim(), code, currency: currency || '€', admin_password_hash: hash })
     .select('id, name, code, currency')
     .single()
 

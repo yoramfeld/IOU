@@ -8,6 +8,7 @@ interface Props {
 
 export default function ApproveBar({ groupId }: Props) {
   const [hasPending, setHasPending] = useState(false)
+  const [pendingName, setPendingName] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const [code, setCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -16,7 +17,10 @@ export default function ApproveBar({ groupId }: Props) {
   useEffect(() => {
     fetch(`/api/auth/verify?groupId=${groupId}`)
       .then(r => r.json())
-      .then(d => setHasPending(d.hasPending))
+      .then(d => {
+        setHasPending(d.hasPending)
+        setPendingName(d.pendingName ?? null)
+      })
       .catch(() => {})
   }, [groupId])
 
@@ -60,10 +64,15 @@ export default function ApproveBar({ groupId }: Props) {
           onClick={() => setOpen(true)}
           className="w-full py-2.5 text-sm font-semibold text-white bg-accent hover:bg-accent/90 transition-colors"
         >
-          Approve a friend
+          {pendingName ? `${pendingName} wants to join` : 'Approve a friend'}
         </button>
       ) : (
         <div className="bg-accent/15 px-4 py-3 space-y-2">
+          {pendingName && (
+            <p className="text-sm text-ink-soft text-center">
+              Approving: <strong>{pendingName}</strong>
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <input
               type="text"

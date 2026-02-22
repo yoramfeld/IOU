@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
+import bcrypt from 'bcryptjs'
 
 export async function POST(request: Request) {
-  const { groupCode, memberName } = await request.json()
+  const { groupCode, memberName, confirmExisting, adminPassword } = await request.json()
 
   if (!groupCode?.trim() || !memberName?.trim()) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
   // Check if name already exists in this group
   const { data: existing } = await supabase
     .from('members')
-    .select('id')
+    .select('id, is_admin')
     .eq('group_id', group.id)
     .ilike('name', memberName.trim())
     .single()
@@ -32,8 +33,45 @@ export async function POST(request: Request) {
   let memberId: string
 
   if (existing) {
-    // Re-pairing: use the existing member
-    memberId = existing.id
+    if (existing.is_admin) {
+      // Admin path: try password before falling through to collision screen
+      if (adminPassword?.trim()) {
+        const { data: groupWithHash } = await supabase
+          .from('groups')
+          .select('admin_password_hash')
+          .eq('id', group.id)
+          .single()
+
+        const match = groupWithHash?.admin_password_hash
+          ? await bcrypt.compare(adminPassword.trim(), groupWithHash.admin_password_hash)
+          : false
+
+        if (match) {
+          // Direct login — no P2P needed
+          return NextResponse.json({
+            directLogin: true,
+            memberId: existing.id,
+            memberName: memberName.trim(),
+            groupId: group.id,
+            groupName: group.name,
+            groupCode: group.code,
+            currency: group.currency,
+            isAdmin: true,
+          })
+        }
+        // Wrong password — fall through to collision screen (don't reveal mismatch)
+      }
+    }
+
+    if (!confirmExisting) {
+      // Name collision — return early, no DB writes
+      return NextResponse.json({
+        nameCollision: true,
+        groupName: group.name,
+        memberName: memberName.trim(),
+      })
+    }
+    memberId = existing.id   // re-pair path (unchanged)
   } else {
     // New member: create them first
     const { data: member, error: memberErr } = await supabase

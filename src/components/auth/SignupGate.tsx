@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useSession, type VerificationData } from '@/hooks/useSession'
+import { useSession, type VerificationData, type NameCollisionData } from '@/hooks/useSession'
 
 const CURRENCIES = [
   { symbol: '€', label: 'Euro (€)' },
@@ -15,7 +15,7 @@ const CURRENCIES = [
   { symbol: 'R$', label: 'Real (R$)' },
 ]
 
-type Step = 'choose' | 'create' | 'join' | 'show-code' | 'verify-wait'
+type Step = 'choose' | 'create' | 'join' | 'show-code' | 'verify-wait' | 'name-collision'
 
 export default function SignupGate() {
   const router = useRouter()
@@ -26,15 +26,18 @@ export default function SignupGate() {
   const [memberName, setMemberName] = useState('')
   const [groupCode, setGroupCode] = useState('')
   const [joinCode, setJoinCode] = useState('')
+  const [adminPassword, setAdminPassword] = useState('')
+  const [joinAdminPassword, setJoinAdminPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [verification, setVerification] = useState<VerificationData | null>(null)
+  const [collision, setCollision] = useState<NameCollisionData | null>(null)
 
   async function handleCreate() {
     if (!groupName.trim() || !memberName.trim()) return
     setSubmitting(true)
     setError('')
-    const session = await createGroup(groupName.trim(), currency, memberName.trim())
+    const session = await createGroup(groupName.trim(), currency, memberName.trim(), adminPassword || undefined)
     if (session) {
       setGroupCode(session.groupCode)
       setStep('show-code')
@@ -48,9 +51,14 @@ export default function SignupGate() {
     if (!joinCode.trim() || !memberName.trim()) return
     setSubmitting(true)
     setError('')
-    const result = await joinGroup(joinCode.trim().toLowerCase(), memberName.trim())
+    const result = await joinGroup(joinCode.trim().toLowerCase(), memberName.trim(), {
+      adminPassword: joinAdminPassword || undefined,
+    })
     if (result.ok) {
       router.push('/expenses')
+    } else if (result.collision) {
+      setCollision(result.collision)
+      setStep('name-collision')
     } else if (result.verification) {
       setVerification(result.verification)
       setStep('verify-wait')
@@ -60,6 +68,26 @@ export default function SignupGate() {
       })
     } else {
       setError(result.error || 'Failed to join')
+    }
+    setSubmitting(false)
+  }
+
+  async function handleConfirmExisting() {
+    if (!joinCode.trim() || !memberName.trim()) return
+    setSubmitting(true)
+    setError('')
+    const result = await joinGroup(joinCode.trim().toLowerCase(), memberName.trim(), { confirmExisting: true })
+    if (result.ok) {
+      router.push('/expenses')
+    } else if (result.verification) {
+      setVerification(result.verification)
+      setStep('verify-wait')
+      claimSession(result.verification).then(() => {
+        router.push('/expenses')
+      })
+    } else {
+      setError(result.error || 'Failed to join')
+      setStep('join')
     }
     setSubmitting(false)
   }
@@ -105,6 +133,18 @@ export default function SignupGate() {
               value={memberName}
               onChange={e => setMemberName(e.target.value)}
             />
+            <div className="space-y-1">
+              <input
+                className="input"
+                placeholder="Admin recovery password (optional)"
+                type="password"
+                value={adminPassword}
+                onChange={e => setAdminPassword(e.target.value)}
+              />
+              <p className="text-xs text-ink-muted px-1">
+                Set this if you want to rejoin without group approval after clearing your cache.
+              </p>
+            </div>
             {error && <p className="text-red text-sm">{error}</p>}
             <button
               onClick={handleCreate}
@@ -158,6 +198,13 @@ export default function SignupGate() {
               value={memberName}
               onChange={e => setMemberName(e.target.value)}
             />
+            <input
+              className="input"
+              placeholder="Admin password (if you're the group admin)"
+              type="password"
+              value={joinAdminPassword}
+              onChange={e => setJoinAdminPassword(e.target.value)}
+            />
             {error && <p className="text-red text-sm">{error}</p>}
             <button
               onClick={handleJoin}
@@ -168,6 +215,35 @@ export default function SignupGate() {
             </button>
             <button onClick={() => { setStep('choose'); setError('') }} className="btn btn-outline">
               Back
+            </button>
+          </div>
+        )}
+
+        {step === 'name-collision' && collision && (
+          <div className="space-y-4 text-center">
+            <h2 className="text-lg font-semibold">Name already taken</h2>
+            <p className="text-sm text-ink-soft">
+              There&rsquo;s already a <strong>{collision.memberName}</strong> in <strong>{collision.groupName}</strong>.
+              Are you this person rejoining, or a new member?
+            </p>
+            {error && <p className="text-red text-sm">{error}</p>}
+            <button
+              onClick={handleConfirmExisting}
+              disabled={submitting}
+              className="btn btn-primary"
+            >
+              {submitting ? 'Joining...' : `I'm the same ${collision.memberName}`}
+            </button>
+            <button
+              onClick={() => {
+                setCollision(null)
+                setMemberName('')
+                setError('Names are used as identifiers — please choose a different name.')
+                setStep('join')
+              }}
+              className="btn btn-outline"
+            >
+              I&rsquo;m a new member
             </button>
           </div>
         )}

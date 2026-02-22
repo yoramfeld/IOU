@@ -42,11 +42,15 @@ export async function GET(request: NextRequest) {
   if (groupId && !pendingId) {
     const { data } = await supabase
       .from('pending_verifications')
-      .select('id')
+      .select('id, member_id, members(name)')
       .eq('group_id', groupId)
       .limit(1)
 
-    return NextResponse.json({ hasPending: (data?.length ?? 0) > 0 })
+    const first = data?.[0] as { members: { name: string } } | undefined
+    return NextResponse.json({
+      hasPending: (data?.length ?? 0) > 0,
+      pendingName: first?.members?.name ?? null,
+    })
   }
 
   if (!pendingId || !memberId) {
