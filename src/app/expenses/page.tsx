@@ -8,6 +8,7 @@ import BottomNav from '@/components/ui/BottomNav'
 import AdminModeToggle from '@/components/ui/AdminModeToggle'
 import ExpenseList from '@/components/expenses/ExpenseList'
 import AddExpenseModal from '@/components/expenses/AddExpenseModal'
+import QRModal from '@/components/ui/QRModal'
 import type { Expense, ExpenseSplit, Member } from '@/types'
 
 export default function ExpensesPage() {
@@ -17,6 +18,7 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<(Expense & { splits: ExpenseSplit[] })[]>([])
   const [members, setMembers] = useState<Member[]>([])
   const [showModal, setShowModal] = useState(false)
+  const [showQRModal, setShowQRModal] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
 
   const fetchData = useCallback(async () => {
@@ -105,12 +107,29 @@ export default function ExpensesPage() {
               {session.name}
             </p>
           </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="w-10 h-10 bg-accent text-white rounded-full flex items-center justify-center text-xl font-bold shadow-lg"
-          >
-            +
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowQRModal(true)}
+              className="w-10 h-10 border border-border rounded-full flex items-center justify-center text-ink-soft hover:bg-surface"
+              title="QR join"
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <rect x="2" y="2" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+                <rect x="4" y="4" width="2" height="2" fill="currentColor"/>
+                <rect x="12" y="2" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+                <rect x="14" y="4" width="2" height="2" fill="currentColor"/>
+                <rect x="2" y="12" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+                <rect x="4" y="14" width="2" height="2" fill="currentColor"/>
+                <path d="M12 12h2v2h-2zM14 14h2v2h-2zM16 12h2v2h-2zM12 16h2v2h-2zM16 16h2v2h-2z" fill="currentColor"/>
+              </svg>
+            </button>
+            <button
+              onClick={() => setShowModal(true)}
+              className="w-10 h-10 bg-accent text-white rounded-full flex items-center justify-center text-xl font-bold shadow-lg"
+            >
+              +
+            </button>
+          </div>
         </div>
         {session.isAdmin && (
           <div className="mt-2">
@@ -133,6 +152,14 @@ export default function ExpensesPage() {
           />
         )}
       </main>
+
+      {showQRModal && (
+        <QRModal
+          groupId={session.groupId}
+          memberId={session.memberId}
+          onClose={() => setShowQRModal(false)}
+        />
+      )}
 
       {showModal && (
         <AddExpenseModal

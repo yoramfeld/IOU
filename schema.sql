@@ -59,6 +59,14 @@ create table pending_verifications (
   created_at  timestamptz not null default now()
 );
 
+-- QR join tokens (reusable within 120s window for initial scan)
+create table qr_tokens (
+  id         uuid primary key default uuid_generate_v4(),
+  group_id   uuid not null references groups(id) on delete cascade,
+  token      text not null unique,
+  created_at timestamptz not null default now()
+);
+
 -- RLS
 alter table groups enable row level security;
 alter table members enable row level security;
@@ -75,3 +83,5 @@ create policy "service write" on expense_splits for all using (true) with check 
 alter table pending_verifications enable row level security;
 create policy "public read" on pending_verifications for select using (true);
 create policy "service write" on pending_verifications for all using (true) with check (true);
+alter table qr_tokens enable row level security;
+create policy "service write" on qr_tokens for all using (true) with check (true);
