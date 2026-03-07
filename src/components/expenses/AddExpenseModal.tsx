@@ -371,7 +371,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                   {/* Paid — ceil on blur; snap to ceil(unassigned) on focus */}
                   <div className="relative w-20 shrink-0">
                     <input
-                      className={`input pl-3 py-1.5 text-sm w-full ${excluded.has(m.id) ? 'opacity-40 pointer-events-none' : ''}`}
+                      className={`input pl-3 pr-2 py-1.5 text-sm text-right w-full ${excluded.has(m.id) ? 'opacity-40 pointer-events-none' : ''}`}
                       type="number"
                       step="1"
                       min="0"
