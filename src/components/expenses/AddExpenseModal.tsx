@@ -137,15 +137,20 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         </div>
 
         {/* Description */}
-        <input
-          className="input"
-          placeholder="What was it for?"
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          autoFocus
-        />
+        <div>
+          <label className="text-xs font-medium text-ink-soft block mb-2">Description</label>
+          <input
+            className="input"
+            placeholder="What was it for?"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            autoFocus
+          />
+        </div>
 
         {/* Bill amount — editable in equal mode, derived (read-only) in custom mode */}
+        <div>
+          <label className="text-xs font-medium text-ink-soft block mb-2">Bill</label>
         <div className="relative">
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-muted text-sm">{currency}</span>
           {splitMode === 'equal' ? (
@@ -167,6 +172,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
               placeholder="0.00"
             />
           )}
+        </div>
         </div>
 
         {/* Tip */}
