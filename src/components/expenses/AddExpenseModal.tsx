@@ -126,20 +126,27 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   }
 
   function handleOrderedChange(pivotIdx: number, pivotMemberId: string, rawValue: string) {
-    const val = parseFloat(rawValue) || 0
-    const rounded = val > 0 ? Math.round(val * 100) / 100 : 0
-
     if (!isManualSplit) {
       // First manual edit: clear all others, enter manual mode
       setIsManualSplit(true)
       const newAmounts: Record<string, string> = {}
       for (const m of sortedMembers) newAmounts[m.id] = ''
-      newAmounts[pivotMemberId] = rounded > 0 ? String(rounded) : ''
+      newAmounts[pivotMemberId] = rawValue
       setCustomAmounts(newAmounts)
       setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
     } else {
       // Manual mode: just update this person, no cascade
-      const newAmounts = { ...customAmounts, [pivotMemberId]: rounded > 0 ? String(rounded) : '' }
+      const newAmounts = { ...customAmounts, [pivotMemberId]: rawValue }
+      setCustomAmounts(newAmounts)
+      setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
+    }
+  }
+
+  function handleOrderedBlur(memberId: string) {
+    const val = parseFloat(customAmounts[memberId] || '') || 0
+    if (val > 0) {
+      const rounded = String(Math.round(val * 100) / 100)
+      const newAmounts = { ...customAmounts, [memberId]: rounded }
       setCustomAmounts(newAmounts)
       setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
     }
@@ -323,7 +330,6 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     const raw = parseFloat(customAmounts[m.id] || '') || 0
                     const rounded2 = Math.round(raw * 100) / 100
                     const isApprox = raw > 0 && Math.abs(raw - rounded2) > 1e-9
-                    const displayVal = raw > 0 ? String(rounded2) : (customAmounts[m.id] ?? '')
                     return (
                       <div className="relative w-20 shrink-0">
                         {isApprox && (
@@ -336,14 +342,14 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                           min="0"
                           placeholder="0"
                           disabled={!billVal || excluded.has(m.id)}
-                          value={displayVal}
+                          value={customAmounts[m.id] ?? ''}
                           onFocus={selectAll}
                           onChange={e => handleOrderedChange(memberIdx, m.id, e.target.value)}
+                          onBlur={() => handleOrderedBlur(m.id)}
                           onDoubleClick={openCalc}
                           onPointerDown={() => { longPressTimer.current = setTimeout(openCalc, 500) }}
                           onPointerUp={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
                           onPointerCancel={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
-                        />
                       </div>
                     )
                   })()}
