@@ -45,6 +45,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
   const [isManualSplit, setIsManualSplit] = useState(false)
+  const [focusedOrderedId, setFocusedOrderedId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -329,23 +330,25 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                   {(() => {
                     const raw = parseFloat(customAmounts[m.id] || '') || 0
                     const rounded2 = Math.round(raw * 100) / 100
+                    const isFocused = focusedOrderedId === m.id
                     const isApprox = raw > 0 && Math.abs(raw - rounded2) > 1e-9
+                    const displayVal = isFocused ? (customAmounts[m.id] ?? '') : (raw > 0 ? String(rounded2) : '')
                     return (
                       <div className="relative w-20 shrink-0">
-                        {isApprox && (
+                        {isApprox && !isFocused && (
                           <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs leading-none select-none pointer-events-none">…</span>
                         )}
                         <input
-                          className={`input no-spinner py-1.5 text-sm text-right w-full pl-3 ${isApprox ? 'pr-4' : 'pr-2'} ${!billVal || excluded.has(m.id) ? 'opacity-40 pointer-events-none' : ''}`}
+                          className={`input no-spinner py-1.5 text-sm text-right w-full pl-3 ${isApprox && !isFocused ? 'pr-4' : 'pr-2'} ${!billVal || excluded.has(m.id) ? 'opacity-40 pointer-events-none' : ''}`}
                           type="number"
                           step="any"
                           min="0"
                           placeholder="0"
                           disabled={!billVal || excluded.has(m.id)}
-                          value={customAmounts[m.id] ?? ''}
-                          onFocus={selectAll}
+                          value={displayVal}
+                          onFocus={e => { setFocusedOrderedId(m.id); selectAll(e) }}
                           onChange={e => handleOrderedChange(memberIdx, m.id, e.target.value)}
-                          onBlur={() => handleOrderedBlur(m.id)}
+                          onBlur={() => { setFocusedOrderedId(null); handleOrderedBlur(m.id) }}
                           onDoubleClick={openCalc}
                           onPointerDown={() => { longPressTimer.current = setTimeout(openCalc, 500) }}
                           onPointerUp={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
