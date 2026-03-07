@@ -262,9 +262,9 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         <div>
           <div className="flex items-center gap-1.5 mb-2">
             <span className="flex-1" />
-            <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Ordered</span>
-            <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Tip inc.</span>
-            <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Paid</span>
+            <span className="w-20 shrink-0 text-xs font-medium text-ink-soft text-center">Ordered</span>
+            <span className="w-10 shrink-0 text-xs font-medium text-ink-soft text-center">Tip</span>
+            <span className="w-20 shrink-0 text-xs font-medium text-ink-soft text-center">Paid</span>
           </div>
 
           <div className="space-y-2">
@@ -273,10 +273,10 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
               function openCalc() { setCalcOpen(m.id); setCalcExpr('') }
               return (
                 <div key={m.id} className="flex items-center gap-1.5">
-                  <span className="text-sm flex-1 truncate min-w-0">{label}</span>
+                  <span className="text-xs flex-1 truncate min-w-0">{label}</span>
 
                   {/* Ordered — disabled until bill is set; no spinners; cascade; double-click/long-press opens calc */}
-                  <div className="relative w-16 shrink-0">
+                  <div className="relative w-20 shrink-0">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
                     <input
                       className={`input no-spinner pl-5 py-1.5 text-sm w-full ${!billVal ? 'opacity-40 pointer-events-none' : ''}`}
@@ -295,21 +295,13 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     />
                   </div>
 
-                  {/* Tip inc. — read-only, greyed */}
-                  <div className="relative w-16 shrink-0">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
-                    <input
-                      className="input no-spinner pl-5 py-1.5 text-xs w-full bg-surface text-ink-muted"
-                      type="text"
-                      readOnly
-                      tabIndex={-1}
-                      placeholder="0"
-                      value={tipIncAmounts[m.id] ?? ''}
-                    />
+                  {/* Tip inc. — read-only, greyed, narrow */}
+                  <div className="w-10 shrink-0 text-center">
+                    <span className="text-[10px] text-ink-muted">{tipIncAmounts[m.id] ?? ''}</span>
                   </div>
 
                   {/* Paid — ceil on blur; snap to ceil(unassigned) on focus */}
-                  <div className="relative w-16 shrink-0">
+                  <div className="relative w-20 shrink-0">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
                     <input
                       className="input pl-5 py-1.5 text-sm w-full"
@@ -337,11 +329,11 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           {/* Per-column left/over indicators */}
           {(orderedUnassigned !== 0 || unassigned !== 0) && (
             <div className="flex justify-end mt-1 gap-1.5">
-              <span className="w-16 shrink-0 text-xs text-center text-ink-muted">
+              <span className="w-20 shrink-0 text-xs text-center text-ink-muted">
                 {orderedUnassigned !== 0 ? (orderedUnassigned > 0 ? `${orderedUnassigned} left` : `+${-orderedUnassigned} over`) : ''}
               </span>
-              <span className="w-16 shrink-0" />
-              <span className="w-16 shrink-0 text-xs text-center text-ink-muted">
+              <span className="w-10 shrink-0" />
+              <span className="w-20 shrink-0 text-xs text-center text-ink-muted">
                 {unassigned !== 0 && finalTotal > 0 ? (unassigned > 0 ? `${unassigned} left` : `+${-unassigned} over`) : ''}
               </span>
             </div>
