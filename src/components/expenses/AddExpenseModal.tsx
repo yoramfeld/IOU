@@ -44,6 +44,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const [calcExpr, setCalcExpr] = useState('')
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
+  const [isManualSplit, setIsManualSplit] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -53,7 +54,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     setExcluded(next)
 
     const billRef = parseFloat(amount) || 0
-    if (billRef > 0) {
+    if (billRef > 0 && !isManualSplit) {
       const active = sortedMembers.filter(m => !next.has(m.id))
       const share = active.length > 0 ? Math.round(billRef / active.length * 10000) / 10000 : 0
       const newAmounts: Record<string, string> = {}
@@ -62,8 +63,13 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
       setCustomAmounts(newAmounts)
       setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
     }
-    if (next.has(memberId))
+    if (next.has(memberId)) {
       setPaidAmounts(prev => ({ ...prev, [memberId]: '' }))
+      if (isManualSplit) {
+        setCustomAmounts(prev => ({ ...prev, [memberId]: '' }))
+        setTipIncAmounts(prev => ({ ...prev, [memberId]: '' }))
+      }
+    }
   }
 
   function fmt(n: number) {
@@ -119,32 +125,29 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     setTipIncAmounts(computeTipInc(customAmounts, pct, roundUp))
   }
 
-  // Cascade ceiled distribution; also recomputes tipIncAmounts
   function handleOrderedChange(pivotIdx: number, pivotMemberId: string, rawValue: string) {
     const val = parseFloat(rawValue) || 0
     const ceiled = val > 0 ? Math.ceil(val) : 0
-    const bRef = parseFloat(amount) || 0
 
-    const newOrdered: Record<string, string> = { ...customAmounts, [pivotMemberId]: ceiled > 0 ? String(ceiled) : '' }
-    if (bRef > 0) {
-      const fixedSum = sortedMembers.slice(0, pivotIdx)
-        .filter(m => !excluded.has(m.id))
-        .reduce((s, m) => s + (parseFloat(customAmounts[m.id]) || 0), 0)
-      const remaining = bRef - fixedSum - ceiled
-      const following = sortedMembers.slice(pivotIdx + 1).filter(m => !excluded.has(m.id))
-      if (remaining > 0 && following.length > 0) {
-        const exactShare = Math.round(remaining / following.length * 10000) / 10000
-        for (const m of following) newOrdered[m.id] = String(exactShare)
-      } else {
-        for (const m of following) newOrdered[m.id] = ''
-      }
+    if (!isManualSplit) {
+      // First manual edit: clear all others, enter manual mode
+      setIsManualSplit(true)
+      const newAmounts: Record<string, string> = {}
+      for (const m of sortedMembers) newAmounts[m.id] = ''
+      newAmounts[pivotMemberId] = ceiled > 0 ? String(ceiled) : ''
+      setCustomAmounts(newAmounts)
+      setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
+    } else {
+      // Manual mode: just update this person, no cascade
+      const newAmounts = { ...customAmounts, [pivotMemberId]: ceiled > 0 ? String(ceiled) : '' }
+      setCustomAmounts(newAmounts)
+      setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
     }
-    setCustomAmounts(newOrdered)
-    setTipIncAmounts(computeTipInc(newOrdered, tipPct, roundUp))
   }
 
   function handleBillChange(value: string) {
     setAmount(value)
+    setIsManualSplit(false)
     const billRef = parseFloat(value) || 0
     if (billRef > 0) {
       const active = sortedMembers.filter(m => !excluded.has(m.id))
