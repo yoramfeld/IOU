@@ -294,11 +294,11 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     const displayVal = raw > 0 ? String(rounded2) : (customAmounts[m.id] ?? '')
                     return (
                       <div className="relative w-20 shrink-0">
-                        <span className="absolute left-1 top-1/2 -translate-y-1/2 text-ink-muted text-xs">
-                          {isApprox ? `~${currency}` : currency}
-                        </span>
+                        {isApprox && (
+                          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-ink-muted text-[11px] select-none">~</span>
+                        )}
                         <input
-                          className={`input no-spinner py-1.5 text-sm w-full ${isApprox ? 'pl-7' : 'pl-5'} ${!billVal ? 'opacity-40 pointer-events-none' : ''}`}
+                          className={`input no-spinner py-1.5 text-sm w-full ${isApprox ? 'pl-5' : 'pl-3'} ${!billVal ? 'opacity-40 pointer-events-none' : ''}`}
                           type="number"
                           step="any"
                           min="0"
@@ -332,9 +332,8 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
 
                   {/* Paid — ceil on blur; snap to ceil(unassigned) on focus */}
                   <div className="relative w-20 shrink-0">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
                     <input
-                      className="input pl-5 py-1.5 text-sm w-full"
+                      className="input pl-3 py-1.5 text-sm w-full"
                       type="number"
                       step="1"
                       min="0"
