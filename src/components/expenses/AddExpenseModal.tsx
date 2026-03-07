@@ -21,10 +21,14 @@ interface Props {
 
 const TIP_OPTIONS = [0, 10, 12, 15]
 
+function readSavedTip(): number {
+  try { return parseInt(localStorage.getItem('iou_tip_pct') || '0', 10) || 0 } catch { return 0 }
+}
+
 export default function AddExpenseModal({ members, currentMemberId, isAdmin, currency, onSubmit, onClose }: Props) {
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
-  const [tipPct, setTipPct] = useState(0)
+  const [tipPct, setTipPct] = useState(readSavedTip)
   const [roundUp, setRoundUp] = useState(true)
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({})
   const [paidAmounts, setPaidAmounts] = useState<Record<string, string>>({})
@@ -33,6 +37,28 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
 
   function fmt(n: number) {
     return Number.isInteger(n) ? String(n) : n.toFixed(2)
+  }
+
+  function selectAll(e: React.FocusEvent<HTMLInputElement>) {
+    const el = e.target
+    setTimeout(() => el.select(), 0)
+  }
+
+  function handleTipChange(pct: number) {
+    setTipPct(pct)
+    try { localStorage.setItem('iou_tip_pct', String(pct)) } catch {}
+  }
+
+  // When bill changes, recalculate equal Ordered shares for all members
+  function handleBillChange(value: string) {
+    setAmount(value)
+    const billVal = parseFloat(value) || 0
+    if (billVal > 0) {
+      const share = Math.round((billVal / members.length) * 100) / 100
+      const newAmounts: Record<string, string> = {}
+      for (const m of members) newAmounts[m.id] = fmt(share)
+      setCustomAmounts(newAmounts)
+    }
   }
 
   // --- Totals ---
@@ -71,7 +97,6 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         : `Paid exceeds total by ${currency}${Math.abs(unassigned).toFixed(2)}`)
       return
     }
-
     setSubmitting(true)
     setError('')
     try {
@@ -108,11 +133,12 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
             placeholder="What was it for?"
             value={description}
             onChange={e => setDescription(e.target.value)}
+            onFocus={selectAll}
             autoFocus
           />
         </div>
 
-        {/* Bill amount (reference for ordered snap) */}
+        {/* Bill */}
         <div>
           <label className="text-xs font-medium text-ink-soft block mb-2">Bill</label>
           <div className="relative">
@@ -124,7 +150,8 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
               min="0"
               placeholder="0"
               value={amount}
-              onChange={e => setAmount(e.target.value)}
+              onFocus={selectAll}
+              onChange={e => handleBillChange(e.target.value)}
             />
           </div>
         </div>
@@ -136,7 +163,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
             {TIP_OPTIONS.map(pct => (
               <button
                 key={pct}
-                onClick={() => setTipPct(pct)}
+                onClick={() => handleTipChange(pct)}
                 className={`flex-1 py-1.5 rounded-full text-sm font-medium border transition-colors ${
                   tipPct === pct ? 'bg-accent text-white border-accent' : 'border-border text-ink-muted hover:bg-surface'
                 }`}
@@ -186,7 +213,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         {/* Member table: Ordered | Owes | Paid */}
         <div>
           <div className="flex items-center gap-1.5 mb-2">
-            <span className="flex-1 text-xs font-medium text-ink-soft"></span>
+            <span className="flex-1" />
             <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Ordered</span>
             <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Owes</span>
             <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Paid</span>
@@ -211,13 +238,14 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                       min="0"
                       placeholder="0"
                       value={customAmounts[m.id] ?? ''}
-                      onFocus={() => {
+                      onFocus={e => {
                         const ref = parseFloat(amount) || 0
                         const others = Object.entries(customAmounts)
                           .filter(([id]) => id !== m.id)
                           .reduce((s, [, v]) => s + (parseFloat(v) || 0), 0)
                         const remaining = Math.max(0, Math.round((ref - others) * 100) / 100)
                         if (remaining > 0) setCustomAmounts(prev => ({ ...prev, [m.id]: fmt(remaining) }))
+                        selectAll(e)
                       }}
                       onChange={e => setCustomAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
                     />
@@ -245,8 +273,9 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                       min="0"
                       placeholder="0"
                       value={paidAmounts[m.id] ?? ''}
-                      onFocus={() => {
+                      onFocus={e => {
                         if (unassigned > 0) setPaidAmounts(prev => ({ ...prev, [m.id]: fmt(unassigned) }))
+                        selectAll(e)
                       }}
                       onChange={e => setPaidAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
                     />
