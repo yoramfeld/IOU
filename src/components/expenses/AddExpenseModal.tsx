@@ -255,21 +255,26 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         {/* Combined member table: split + paid */}
         <div>
           {/* Column headers */}
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-1.5 mb-2">
             <span className="flex-1 text-xs font-medium text-ink-soft">
-              {splitMode === 'equal' ? `Split (${splitAmong.length} of ${members.length})` : 'Share'}
+              {splitMode === 'equal' ? `Split (${splitAmong.length} of ${members.length})` : ''}
             </span>
             {splitMode === 'custom' && (
-              <span className="w-20 shrink-0 text-xs font-medium text-ink-soft text-center">Share</span>
+              <>
+                <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Ordered</span>
+                <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Owes</span>
+              </>
             )}
-            <span className="w-20 shrink-0 text-xs font-medium text-ink-soft text-center">Paid</span>
+            <span className={`shrink-0 text-xs font-medium text-ink-soft text-center ${splitMode === 'custom' ? 'w-16' : 'w-20'}`}>Paid</span>
           </div>
 
           <div className="space-y-2">
             {members.map(m => {
               const label = m.name + (m.id === currentMemberId ? ' (you)' : '')
+              const share = parseFloat(customAmounts[m.id] || '0')
+              const owes = share > 0 ? Math.round(share * (1 + tipPct / 100) * scaleFactor * 100) / 100 : 0
               return (
-                <div key={m.id} className="flex items-center gap-2">
+                <div key={m.id} className="flex items-center gap-1.5">
                   {/* Split control */}
                   {splitMode === 'equal' ? (
                     <label className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
@@ -286,7 +291,8 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                   ) : (
                     <>
                       <span className="text-sm flex-1 truncate min-w-0">{label}</span>
-                      <div className="relative w-20 shrink-0">
+                      {/* Ordered input */}
+                      <div className="relative w-16 shrink-0">
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
                         <input
                           className="input pl-5 py-1.5 text-sm w-full"
@@ -295,14 +301,33 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                           min="0"
                           placeholder="0"
                           value={customAmounts[m.id] ?? ''}
+                          onFocus={() => {
+                            const ref = parseFloat(amount) || 0
+                            const others = Object.entries(customAmounts)
+                              .filter(([id]) => id !== m.id)
+                              .reduce((s, [, v]) => s + (parseFloat(v) || 0), 0)
+                            const remaining = Math.max(0, Math.round((ref - others) * 100) / 100)
+                            if (remaining > 0) setCustomAmounts(prev => ({ ...prev, [m.id]: fmt(remaining) }))
+                          }}
                           onChange={e => setCustomAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
+                        />
+                      </div>
+                      {/* Owes (read-only: ordered + tip + round-up) */}
+                      <div className="relative w-16 shrink-0">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
+                        <input
+                          className="input pl-5 py-1.5 text-sm w-full bg-surface text-ink-muted"
+                          type="text"
+                          readOnly
+                          value={owes > 0 ? fmt(owes) : ''}
+                          placeholder="0"
                         />
                       </div>
                     </>
                   )}
 
                   {/* Paid input */}
-                  <div className="relative w-20 shrink-0">
+                  <div className={`relative shrink-0 ${splitMode === 'custom' ? 'w-16' : 'w-20'}`}>
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
                     <input
                       className="input pl-5 py-1.5 text-sm w-full"
