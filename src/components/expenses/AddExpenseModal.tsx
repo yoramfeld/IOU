@@ -197,6 +197,12 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   async function handleSubmit() {
     if (!description.trim()) { setError('Enter a description'); return }
     if (computedCustomSplits.length === 0) { setError('Enter at least one ordered amount'); return }
+    if (billVal > 0 && orderedUnassigned !== 0) {
+      setError(orderedUnassigned > 0
+        ? `${currency}${orderedUnassigned} of bill unassigned`
+        : `Ordered exceeds bill by ${currency}${-orderedUnassigned}`)
+      return
+    }
     if (payers.length === 0) { setError('Enter who paid'); return }
     if (unassigned !== 0) {
       setError(unassigned > 0
