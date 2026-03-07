@@ -8,6 +8,7 @@ interface Props {
   currentMemberId: string
   isAdmin: boolean
   currency: string
+  memberBalances?: Record<string, number>
   onSubmit: (data: {
     paidBy: string
     amount: number
@@ -25,7 +26,13 @@ function readSavedTip(): number {
   try { return parseInt(localStorage.getItem('iou_tip_pct') || '0', 10) || 0 } catch { return 0 }
 }
 
-export default function AddExpenseModal({ members, currentMemberId, isAdmin, currency, onSubmit, onClose }: Props) {
+export default function AddExpenseModal({ members, currentMemberId, isAdmin, currency, memberBalances, onSubmit, onClose }: Props) {
+  // Sort by biggest debt first (most negative balance), randomize ties — fixed on open
+  const [sortedMembers] = useState<Member[]>(() => {
+    const shuffled = [...members].sort(() => Math.random() - 0.5)
+    return shuffled.sort((a, b) => (memberBalances?.[a.id] ?? 0) - (memberBalances?.[b.id] ?? 0))
+  })
+
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [tipPct, setTipPct] = useState(readSavedTip)
@@ -100,9 +107,9 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
 
     const newOrdered: Record<string, string> = { ...customAmounts, [pivotMemberId]: ceiled > 0 ? String(ceiled) : '' }
     if (bRef > 0) {
-      const fixedSum = members.slice(0, pivotIdx).reduce((s, m) => s + (parseFloat(customAmounts[m.id]) || 0), 0)
+      const fixedSum = sortedMembers.slice(0, pivotIdx).reduce((s, m) => s + (parseFloat(customAmounts[m.id]) || 0), 0)
       const remaining = bRef - fixedSum - ceiled
-      const following = members.slice(pivotIdx + 1)
+      const following = sortedMembers.slice(pivotIdx + 1)
       if (remaining > 0 && following.length > 0) {
         const exactShare = Math.round(remaining / following.length * 10000) / 10000
         for (const m of following) newOrdered[m.id] = String(exactShare)
@@ -118,9 +125,9 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     setAmount(value)
     const billRef = parseFloat(value) || 0
     if (billRef > 0) {
-      const exactShare = Math.round(billRef / members.length * 10000) / 10000
+      const exactShare = Math.round(billRef / sortedMembers.length * 10000) / 10000
       const newAmounts: Record<string, string> = {}
-      for (const m of members) newAmounts[m.id] = String(exactShare)
+      for (const m of sortedMembers) newAmounts[m.id] = String(exactShare)
       setCustomAmounts(newAmounts)
       setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
     } else {
@@ -135,7 +142,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const tipAmount = finalTotal - subtotal
 
   // --- Split (uses tipIncAmounts as the authoritative per-person totals) ---
-  const computedCustomSplits = members
+  const computedCustomSplits = sortedMembers
     .filter(m => (parseFloat(tipIncAmounts[m.id]) || 0) > 0)
     .map(m => ({ memberId: m.id, amount: parseFloat(tipIncAmounts[m.id]) || 0 }))
 
@@ -144,10 +151,10 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const orderedUnassigned = billVal > 0 ? Math.round((billVal - subtotal) * 100) / 100 : 0
 
   // --- Paid ---
-  const totalPaid = members.reduce((s, m) => s + (parseFloat(paidAmounts[m.id]) || 0), 0)
+  const totalPaid = sortedMembers.reduce((s, m) => s + (parseFloat(paidAmounts[m.id]) || 0), 0)
   const unassigned = Math.round((finalTotal - totalPaid) * 100) / 100
 
-  const payers = members
+  const payers = sortedMembers
     .filter(m => (parseFloat(paidAmounts[m.id]) || 0) > 0)
     .map(m => ({ memberId: m.id, amount: Math.round(parseFloat(paidAmounts[m.id]) * 100) / 100 }))
 
@@ -272,7 +279,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           </div>
 
           <div className="space-y-2">
-            {members.map((m, memberIdx) => {
+            {sortedMembers.map((m, memberIdx) => {
               const label = m.name + (m.id === currentMemberId ? ' (you)' : '')
               function openCalc() { setCalcOpen(m.id); setCalcExpr('') }
               return (

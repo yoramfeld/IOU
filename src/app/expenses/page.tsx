@@ -75,29 +75,26 @@ export default function ExpensesPage() {
   }
 
   // Compute each payer's running balance per expense (oldest → newest)
-  const payerBalances = useMemo(() => {
+  const { payerBalances, memberBalances } = useMemo(() => {
     const map: Record<string, Record<string, number>> = {}
     const balances: Record<string, number> = {} // memberId → running balance
 
     // Expenses are newest-first, iterate in reverse for oldest-first
     for (let i = expenses.length - 1; i >= 0; i--) {
       const exp = expenses[i]
-      // Each payer gains their contributed amount
       for (const p of (exp.payers ?? [])) {
         balances[p.member_id] = (balances[p.member_id] || 0) + Number(p.amount)
       }
-      // Each split member loses their share
       for (const s of exp.splits) {
-        balances[s.member_id] = (balances[s.member_id] || 0) + Number(s.amount) // amount is negative
+        balances[s.member_id] = (balances[s.member_id] || 0) + Number(s.amount)
       }
-      // Store running balance for every payer on this expense
       const payerIds = exp.payers?.length ? exp.payers.map(p => p.member_id) : [exp.paid_by]
       map[exp.id] = {}
       for (const id of payerIds) {
         map[exp.id][id] = Math.round((balances[id] || 0) * 100) / 100
       }
     }
-    return map
+    return { payerBalances: map, memberBalances: { ...balances } }
   }, [expenses])
 
   if (loading || !adminLoaded) {
@@ -176,6 +173,7 @@ export default function ExpensesPage() {
           currentMemberId={session.memberId}
           isAdmin={session.isAdmin && adminMode}
           currency={session.currency}
+          memberBalances={memberBalances}
           onSubmit={handleAddExpense}
           onClose={() => setShowModal(false)}
         />
