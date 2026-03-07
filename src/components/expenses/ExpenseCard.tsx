@@ -60,13 +60,17 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
                   const bal = payerBalances?.[p.member_id]
                   return (
                     <p key={p.member_id} className="text-xs text-ink-muted flex items-center gap-1">
-                      <span>
-                        {m?.name}{isMultiPayer ? ` paid ${currency}${Number(p.amount).toFixed(2)} and now at` : ' paid and now at'}
-                      </span>
-                      {bal !== undefined && (
-                        <span className={`font-medium ${bal >= 0 ? 'text-green' : 'text-red'}`}>
-                          {bal >= 0 ? '+' : ''}{currency}{bal.toFixed(2)}
-                        </span>
+                      {isMultiPayer ? (
+                        <span>{m?.name} paid {currency}{Number(p.amount).toFixed(2)}</span>
+                      ) : (
+                        <>
+                          <span>{m?.name} paid and now at</span>
+                          {bal !== undefined && (
+                            <span className={`font-medium ${bal >= 0 ? 'text-green' : 'text-red'}`}>
+                              {bal >= 0 ? '+' : ''}{currency}{bal.toFixed(2)}
+                            </span>
+                          )}
+                        </>
                       )}
                     </p>
                   )
