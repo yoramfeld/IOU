@@ -127,19 +127,19 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
 
   function handleOrderedChange(pivotIdx: number, pivotMemberId: string, rawValue: string) {
     const val = parseFloat(rawValue) || 0
-    const ceiled = val > 0 ? Math.ceil(val) : 0
+    const rounded = val > 0 ? Math.round(val * 100) / 100 : 0
 
     if (!isManualSplit) {
       // First manual edit: clear all others, enter manual mode
       setIsManualSplit(true)
       const newAmounts: Record<string, string> = {}
       for (const m of sortedMembers) newAmounts[m.id] = ''
-      newAmounts[pivotMemberId] = ceiled > 0 ? String(ceiled) : ''
+      newAmounts[pivotMemberId] = rounded > 0 ? String(rounded) : ''
       setCustomAmounts(newAmounts)
       setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
     } else {
       // Manual mode: just update this person, no cascade
-      const newAmounts = { ...customAmounts, [pivotMemberId]: ceiled > 0 ? String(ceiled) : '' }
+      const newAmounts = { ...customAmounts, [pivotMemberId]: rounded > 0 ? String(rounded) : '' }
       setCustomAmounts(newAmounts)
       setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
     }
