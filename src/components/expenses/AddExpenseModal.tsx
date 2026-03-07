@@ -350,6 +350,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                           onPointerDown={() => { longPressTimer.current = setTimeout(openCalc, 500) }}
                           onPointerUp={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
                           onPointerCancel={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
+                        />
                       </div>
                     )
                   })()}
