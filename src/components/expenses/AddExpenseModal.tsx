@@ -327,10 +327,10 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     return (
                       <div className="relative w-20 shrink-0">
                         {isApprox && (
-                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-amber-500 font-bold text-xs leading-none select-none pointer-events-none">…</span>
+                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs leading-none select-none pointer-events-none">…</span>
                         )}
                         <input
-                          className={`input no-spinner py-1.5 text-sm w-full pl-3 ${isApprox ? 'pr-5' : 'pr-2'} ${!billVal || excluded.has(m.id) ? 'opacity-40 pointer-events-none' : ''}`}
+                          className={`input no-spinner py-1.5 text-sm text-right w-full pl-3 ${isApprox ? 'pr-4' : 'pr-2'} ${!billVal || excluded.has(m.id) ? 'opacity-40 pointer-events-none' : ''}`}
                           type="number"
                           step="any"
                           min="0"
