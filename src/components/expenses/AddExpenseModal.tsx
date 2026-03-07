@@ -56,28 +56,29 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     return expr.split('+').reduce((s, v) => s + (parseFloat(v.trim()) || 0), 0)
   }
 
-  // Distribute bill from pivotIdx onward with ceil integers; members before pivot are untouched
-  function distributeFromPivot(
-    pivotIdx: number,
-    pivotVal: number,
-    prev: Record<string, string>,
-    billRef: number
-  ): Record<string, string> {
-    const ceiled = pivotVal > 0 ? Math.ceil(pivotVal) : 0
-    const fixedSum = members.slice(0, pivotIdx).reduce((s, m) => s + (parseFloat(prev[m.id]) || 0), 0)
-    let remaining = billRef - fixedSum - ceiled
-    const result: Record<string, string> = { ...prev, [members[pivotIdx].id]: ceiled > 0 ? String(ceiled) : '' }
-    const following = members.slice(pivotIdx + 1)
-    for (let i = 0; i < following.length; i++) {
-      if (remaining <= 0) {
-        result[following[i].id] = ''
-      } else {
-        const share = Math.ceil(remaining / (following.length - i))
-        result[following[i].id] = String(share)
-        remaining -= share
+  // Cascade ceiled distribution starting at pivotIdx; members before pivot untouched
+  function handleOrderedChange(pivotIdx: number, pivotMemberId: string, rawValue: string) {
+    const val = parseFloat(rawValue) || 0
+    const ceiled = val > 0 ? Math.ceil(val) : 0
+    const bRef = parseFloat(amount) || 0
+
+    setCustomAmounts(prev => {
+      const result: Record<string, string> = { ...prev, [pivotMemberId]: ceiled > 0 ? String(ceiled) : '' }
+      if (bRef <= 0) return result   // no bill to cascade against
+      const fixedSum = members.slice(0, pivotIdx).reduce((s, m) => s + (parseFloat(prev[m.id]) || 0), 0)
+      let remaining = bRef - fixedSum - ceiled
+      const following = members.slice(pivotIdx + 1)
+      for (let i = 0; i < following.length; i++) {
+        if (remaining <= 0) {
+          result[following[i].id] = ''
+        } else {
+          const share = Math.ceil(remaining / (following.length - i))
+          result[following[i].id] = String(share)
+          remaining -= share
+        }
       }
-    }
-    return result
+      return result
+    })
   }
 
   function handleBillChange(value: string) {
@@ -255,7 +256,6 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
               const label = m.name + (m.id === currentMemberId ? ' (you)' : '')
               const share = parseFloat(customAmounts[m.id] || '0')
               const owes = share > 0 ? Math.ceil(share * (1 + tipPct / 100) * scaleFactor) : 0
-              const billRef = parseFloat(amount) || 0
               function openCalc() { setCalcOpen(m.id); setCalcExpr('') }
               return (
                 <div key={m.id} className="flex items-center gap-1.5">
@@ -267,15 +267,12 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     <input
                       className="input pl-5 py-1.5 text-sm w-full"
                       type="number"
-                      step="1"
+                      step="any"
                       min="0"
                       placeholder="0"
                       value={customAmounts[m.id] ?? ''}
                       onFocus={selectAll}
-                      onChange={e => {
-                        const val = parseFloat(e.target.value) || 0
-                        setCustomAmounts(prev => distributeFromPivot(memberIdx, val, prev, billRef))
-                      }}
+                      onChange={e => handleOrderedChange(memberIdx, m.id, e.target.value)}
                       onDoubleClick={openCalc}
                       onPointerDown={() => { longPressTimer.current = setTimeout(openCalc, 500) }}
                       onPointerUp={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
@@ -353,9 +350,10 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         {/* Calculator modal */}
         {calcOpen && (() => {
           const calcSum = parseSum(calcExpr)
-          const memberName = members.find(m => m.id === calcOpen)?.name ?? ''
+          const calcMemberIdx = members.findIndex(m => m.id === calcOpen)
+          const memberName = members[calcMemberIdx]?.name ?? ''
           function applyCalc() {
-            if (calcSum > 0) setCustomAmounts(prev => ({ ...prev, [calcOpen!]: fmt(calcSum) }))
+            if (calcSum > 0) handleOrderedChange(calcMemberIdx, calcOpen!, String(calcSum))
             setCalcOpen(null); setCalcExpr('')
           }
           return (
