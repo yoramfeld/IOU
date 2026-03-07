@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy, payers, deviationDelta } = await request.json()
+  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy, payers } = await request.json()
 
   const hasCustom = Array.isArray(customSplits) && customSplits.length > 0
   if (!groupId || !paidBy || !amount || !description?.trim() || !enteredBy) {
@@ -74,7 +74,6 @@ export async function POST(request: Request) {
       amount: Number(amount),
       description: description.trim(),
       entered_by: enteredBy,
-      rounding_deviation: deviationDelta && Object.keys(deviationDelta).length > 0 ? deviationDelta : null,
     })
     .select('id')
     .single()
@@ -174,21 +173,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to create splits' }, { status: 500 })
   }
 
-  // Update group's cumulative rounding balances
-  if (deviationDelta && Object.keys(deviationDelta).length > 0) {
-    const { data: grp } = await supabase
-      .from('groups')
-      .select('rounding_balances')
-      .eq('id', groupId)
-      .single()
-    const current: Record<string, number> = grp?.rounding_balances ?? {}
-    const updated: Record<string, number> = { ...current }
-    for (const [id, delta] of Object.entries(deviationDelta as Record<string, number>)) {
-      updated[id] = Math.round(((updated[id] ?? 0) + delta) * 1000) / 1000
-    }
-    await supabase.from('groups').update({ rounding_balances: updated }).eq('id', groupId)
-  }
-
   return NextResponse.json({ ok: true })
 }
 
@@ -231,13 +215,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'Missing expenseId' }, { status: 400 })
   }
 
-  // Fetch expense's stored deviation and group_id before deleting
-  const { data: expRow } = await supabase
-    .from('expenses')
-    .select('group_id, rounding_deviation')
-    .eq('id', expenseId)
-    .single()
-
   const { error } = await supabase
     .from('expenses')
     .delete()
@@ -245,22 +222,6 @@ export async function DELETE(request: Request) {
 
   if (error) {
     return NextResponse.json({ error: 'Failed to delete expense' }, { status: 500 })
-  }
-
-  // Reverse rounding deviation
-  if (expRow?.rounding_deviation && expRow.group_id) {
-    const delta = expRow.rounding_deviation as Record<string, number>
-    const { data: grp } = await supabase
-      .from('groups')
-      .select('rounding_balances')
-      .eq('id', expRow.group_id)
-      .single()
-    const current: Record<string, number> = grp?.rounding_balances ?? {}
-    const updated: Record<string, number> = { ...current }
-    for (const [id, d] of Object.entries(delta)) {
-      updated[id] = Math.round(((updated[id] ?? 0) - d) * 1000) / 1000
-    }
-    await supabase.from('groups').update({ rounding_balances: updated }).eq('id', expRow.group_id)
   }
 
   return NextResponse.json({ ok: true })
