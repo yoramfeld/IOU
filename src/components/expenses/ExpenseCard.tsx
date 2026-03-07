@@ -61,7 +61,7 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
                   return (
                     <p key={p.member_id} className="text-xs text-ink-muted whitespace-nowrap overflow-hidden">
                       {isMultiPayer ? (
-                        <span>{m?.name} paid {currency}{Number(p.amount).toFixed(2)}</span>
+                        <span>{m?.name} paid {currency}{Math.round(Number(p.amount))}</span>
                       ) : (
                         <>
                           <span>{m?.name} paid and now at </span>
@@ -83,7 +83,7 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="font-bold text-sm">{currency}{Number(expense.amount).toFixed(2)}</p>
+          <p className="font-bold text-sm">{currency}{Math.round(Number(expense.amount))}</p>
           {isAdmin && onDelete && (
             <button
               onClick={() => onDelete(expense.id)}
@@ -100,7 +100,7 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
           <div className="flex gap-1 flex-wrap justify-end">
             {splitPairs.map(({ member: m, amount: a }) => (
               <span key={m.id} className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full">
-                {m.name}{isUnequal ? ` ${currency}${Math.abs(Number(a)).toFixed(2)}` : ''}
+                {m.name}{isUnequal ? ` ${currency}${Math.abs(Math.round(Number(a)))}` : ''}
               </span>
             ))}
           </div>
