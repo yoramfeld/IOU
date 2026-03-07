@@ -317,12 +317,22 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     )
                   })()}
 
-                  {/* Tip inc. — read-only, greyed, narrow; display as rounded integer */}
-                  <div className="w-10 shrink-0 text-center">
-                    <span className="text-[10px] text-ink-muted">
-                      {(parseFloat(tipIncAmounts[m.id] || '0') > 0) ? Math.round(parseFloat(tipIncAmounts[m.id])) : ''}
-                    </span>
-                  </div>
+                  {/* Tip inc. — read-only, greyed, narrow; 2 decimal places with ~ if rounded */}
+                  {(() => {
+                    const raw = parseFloat(tipIncAmounts[m.id] || '') || 0
+                    const rounded2 = Math.round(raw * 100) / 100
+                    const isApprox = raw > 0 && Math.abs(raw - rounded2) > 1e-9
+                    return (
+                      <div className="w-10 shrink-0 text-center relative">
+                        {isApprox && (
+                          <span className="absolute -left-2 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted select-none">~</span>
+                        )}
+                        <span className="text-[10px] text-ink-muted">
+                          {raw > 0 ? rounded2 : ''}
+                        </span>
+                      </div>
+                    )
+                  })()}
 
                   {/* Paid — ceil on blur; snap to ceil(unassigned) on focus */}
                   <div className="relative w-20 shrink-0">
