@@ -178,6 +178,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   }
 
   // --- Totals ---
+  const billVal = parseFloat(amount) || 0
   const subtotal = Object.values(customAmounts).reduce((s, v) => s + (parseFloat(v) || 0), 0)
   // Base the grand total on the bill (stable), not the running ordered sum
   const finalTotal = billVal > 0
@@ -191,7 +192,6 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     .map(m => ({ memberId: m.id, amount: parseFloat(tipIncAmounts[m.id]) || 0 }))
 
   // --- Ordered unassigned (vs bill) ---
-  const billVal = parseFloat(amount) || 0
   const orderedUnassigned = billVal > 0 ? Math.round((billVal - subtotal) * 100) / 100 : 0
 
   // --- Paid ---
