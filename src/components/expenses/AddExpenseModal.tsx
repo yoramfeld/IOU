@@ -287,24 +287,35 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                   <span className="text-xs flex-1 truncate min-w-0">{label}</span>
 
                   {/* Ordered — disabled until bill is set; no spinners; cascade; double-click/long-press opens calc */}
-                  <div className="relative w-20 shrink-0">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
-                    <input
-                      className={`input no-spinner pl-5 py-1.5 text-sm w-full ${!billVal ? 'opacity-40 pointer-events-none' : ''}`}
-                      type="number"
-                      step="any"
-                      min="0"
-                      placeholder="0"
-                      disabled={!billVal}
-                      value={customAmounts[m.id] ?? ''}
-                      onFocus={selectAll}
-                      onChange={e => handleOrderedChange(memberIdx, m.id, e.target.value)}
-                      onDoubleClick={openCalc}
-                      onPointerDown={() => { longPressTimer.current = setTimeout(openCalc, 500) }}
-                      onPointerUp={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
-                      onPointerCancel={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
-                    />
-                  </div>
+                  {(() => {
+                    const raw = parseFloat(customAmounts[m.id] || '') || 0
+                    const rounded2 = Math.round(raw * 100) / 100
+                    const isApprox = raw > 0 && Math.abs(raw - rounded2) > 1e-9
+                    const displayVal = raw > 0 ? String(rounded2) : (customAmounts[m.id] ?? '')
+                    return (
+                      <div className="relative w-20 shrink-0">
+                        {isApprox && (
+                          <span className="absolute -left-3 top-1/2 -translate-y-1/2 text-[9px] text-ink-muted select-none">~</span>
+                        )}
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
+                        <input
+                          className={`input no-spinner pl-5 py-1.5 text-sm w-full ${!billVal ? 'opacity-40 pointer-events-none' : ''}`}
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder="0"
+                          disabled={!billVal}
+                          value={displayVal}
+                          onFocus={selectAll}
+                          onChange={e => handleOrderedChange(memberIdx, m.id, e.target.value)}
+                          onDoubleClick={openCalc}
+                          onPointerDown={() => { longPressTimer.current = setTimeout(openCalc, 500) }}
+                          onPointerUp={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
+                          onPointerCancel={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
+                        />
+                      </div>
+                    )
+                  })()}
 
                   {/* Tip inc. — read-only, greyed, narrow; display as rounded integer */}
                   <div className="w-10 shrink-0 text-center">
