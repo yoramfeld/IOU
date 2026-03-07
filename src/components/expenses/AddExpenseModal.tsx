@@ -48,6 +48,13 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const [focusedOrderedId, setFocusedOrderedId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function showError(msg: string) {
+    setError(msg)
+    if (errorTimer.current) clearTimeout(errorTimer.current)
+    errorTimer.current = setTimeout(() => setError(''), 2000)
+  }
 
   function toggleExclude(memberId: string) {
     const next = new Set(excluded)
@@ -195,17 +202,17 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const paidBy = payers[0]?.memberId ?? currentMemberId
 
   async function handleSubmit() {
-    if (!description.trim()) { setError('Enter a description'); return }
-    if (computedCustomSplits.length === 0) { setError('Enter at least one ordered amount'); return }
+    if (!description.trim()) { showError('Enter a description'); return }
+    if (computedCustomSplits.length === 0) { showError('Enter at least one ordered amount'); return }
     if (billVal > 0 && orderedUnassigned !== 0) {
-      setError(orderedUnassigned > 0
+      showError(orderedUnassigned > 0
         ? `${currency}${orderedUnassigned} missing`
         : `${currency}${-orderedUnassigned} over`)
       return
     }
-    if (payers.length === 0) { setError('Enter who paid'); return }
+    if (payers.length === 0) { showError('Enter who paid'); return }
     if (unassigned !== 0) {
-      setError(unassigned > 0
+      showError(unassigned > 0
         ? `${currency}${unassigned} missing`
         : `${currency}${-unassigned} over`)
       return
@@ -223,7 +230,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
       })
       onClose()
     } catch {
-      setError('Failed to add expense')
+      showError('Failed to add expense')
     }
     setSubmitting(false)
   }
@@ -372,7 +379,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     return (
                       <div className="w-10 shrink-0 text-center">
                         <span className="text-[10px] text-ink-muted">
-                          {raw > 0 ? (isApprox ? `${rounded2}…` : String(rounded2)) : ''}
+                          {raw > 0 ? (isApprox ? `${currency}${rounded2}…` : `${currency}${rounded2}`) : ''}
                         </span>
                       </div>
                     )
@@ -408,11 +415,11 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           {(orderedUnassigned !== 0 || unassigned !== 0) && (
             <div className="flex justify-end mt-1 gap-1.5">
               <span className="w-20 shrink-0 text-xs text-center text-ink-muted">
-                {orderedUnassigned !== 0 ? (orderedUnassigned > 0 ? `${orderedUnassigned} missing` : `${-orderedUnassigned} over`) : ''}
+                {orderedUnassigned !== 0 ? (orderedUnassigned > 0 ? `${currency}${orderedUnassigned} missing` : `${currency}${-orderedUnassigned} over`) : ''}
               </span>
               <span className="w-10 shrink-0" />
               <span className="w-20 shrink-0 text-xs text-center text-ink-muted">
-                {unassigned !== 0 && finalTotal > 0 ? (unassigned > 0 ? `${unassigned} missing` : `${-unassigned} over`) : ''}
+                {unassigned !== 0 && finalTotal > 0 ? (unassigned > 0 ? `${currency}${unassigned} missing` : `${currency}${-unassigned} over`) : ''}
               </span>
             </div>
           )}
