@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { Member } from '@/types'
 
 interface Props {
@@ -31,6 +31,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const [tipPct, setTipPct] = useState(readSavedTip)
   const [roundUp, setRoundUp] = useState(true)
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({})
+  const [tipIncAmounts, setTipIncAmounts] = useState<Record<string, string>>({})
   const [paidAmounts, setPaidAmounts] = useState<Record<string, string>>({})
   const [calcOpen, setCalcOpen] = useState<string | null>(null)
   const [calcExpr, setCalcExpr] = useState('')
@@ -47,38 +48,59 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     setTimeout(() => el.select(), 0)
   }
 
-  function handleTipChange(pct: number) {
-    setTipPct(pct)
-    try { localStorage.setItem('iou_tip_pct', String(pct)) } catch {}
-  }
+  // Disable browser back button while modal is open
+  useEffect(() => {
+    window.history.pushState(null, '', window.location.href)
+    const onPop = () => window.history.pushState(null, '', window.location.href)
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
 
   function parseSum(expr: string): number {
     return expr.split('+').reduce((s, v) => s + (parseFloat(v.trim()) || 0), 0)
   }
 
-  // Cascade ceiled distribution starting at pivotIdx; members before pivot untouched
+  // Tip inc. = ceil or round of ordered*(1+pct/100) per member
+  function computeTipInc(ordered: Record<string, string>, pct: number, ru: boolean): Record<string, string> {
+    const result: Record<string, string> = {}
+    for (const [id, v] of Object.entries(ordered)) {
+      const o = parseFloat(v) || 0
+      const raw = o > 0 ? o * (1 + pct / 100) : 0
+      const ti = raw > 0 ? (ru ? Math.ceil(raw) : Math.round(raw)) : 0
+      result[id] = ti > 0 ? String(ti) : ''
+    }
+    return result
+  }
+
+  function handleTipChange(pct: number) {
+    setTipPct(pct)
+    try { localStorage.setItem('iou_tip_pct', String(pct)) } catch {}
+    setTipIncAmounts(computeTipInc(customAmounts, pct, roundUp))
+  }
+
+  // Cascade ceiled distribution; also recomputes tipIncAmounts
   function handleOrderedChange(pivotIdx: number, pivotMemberId: string, rawValue: string) {
     const val = parseFloat(rawValue) || 0
     const ceiled = val > 0 ? Math.ceil(val) : 0
     const bRef = parseFloat(amount) || 0
 
-    setCustomAmounts(prev => {
-      const result: Record<string, string> = { ...prev, [pivotMemberId]: ceiled > 0 ? String(ceiled) : '' }
-      if (bRef <= 0) return result   // no bill to cascade against
-      const fixedSum = members.slice(0, pivotIdx).reduce((s, m) => s + (parseFloat(prev[m.id]) || 0), 0)
+    const newOrdered: Record<string, string> = { ...customAmounts, [pivotMemberId]: ceiled > 0 ? String(ceiled) : '' }
+    if (bRef > 0) {
+      const fixedSum = members.slice(0, pivotIdx).reduce((s, m) => s + (parseFloat(customAmounts[m.id]) || 0), 0)
       let remaining = bRef - fixedSum - ceiled
       const following = members.slice(pivotIdx + 1)
       for (let i = 0; i < following.length; i++) {
         if (remaining <= 0) {
-          result[following[i].id] = ''
+          newOrdered[following[i].id] = ''
         } else {
           const share = Math.ceil(remaining / (following.length - i))
-          result[following[i].id] = String(share)
+          newOrdered[following[i].id] = String(share)
           remaining -= share
         }
       }
-      return result
-    })
+    }
+    setCustomAmounts(newOrdered)
+    setTipIncAmounts(computeTipInc(newOrdered, tipPct, roundUp))
   }
 
   function handleBillChange(value: string) {
@@ -94,26 +116,22 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         remaining -= share
       }
       setCustomAmounts(newAmounts)
+      setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
     } else {
       setCustomAmounts({})
+      setTipIncAmounts({})
     }
   }
 
   // --- Totals ---
   const subtotal = Object.values(customAmounts).reduce((s, v) => s + (parseFloat(v) || 0), 0)
-  const totalAmount = Math.round(subtotal * (1 + tipPct / 100) * 100) / 100
-  const tipAmount = Math.round((totalAmount - subtotal) * 100) / 100
-  const finalTotal = roundUp ? Math.ceil(totalAmount) : totalAmount
-  const roundUpDelta = Math.round((finalTotal - totalAmount) * 100) / 100
-  const scaleFactor = totalAmount > 0 ? finalTotal / totalAmount : 1
+  const finalTotal = Object.values(tipIncAmounts).reduce((s, v) => s + (parseFloat(v) || 0), 0)
+  const tipAmount = finalTotal - subtotal
 
-  // --- Split ---
-  const computedCustomSplits = Object.entries(customAmounts)
-    .filter(([, v]) => parseFloat(v) > 0)
-    .map(([memberId, v]) => ({
-      memberId,
-      amount: Math.round(parseFloat(v) * (1 + tipPct / 100) * scaleFactor * 100) / 100,
-    }))
+  // --- Split (uses tipIncAmounts as the authoritative per-person totals) ---
+  const computedCustomSplits = members
+    .filter(m => (parseFloat(tipIncAmounts[m.id]) || 0) > 0)
+    .map(m => ({ memberId: m.id, amount: parseFloat(tipIncAmounts[m.id]) || 0 }))
 
   // --- Ordered unassigned (vs bill) ---
   const billVal = parseFloat(amount) || 0
@@ -212,10 +230,14 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-1.5 mb-2">
-              <span className="text-xs font-medium text-ink-soft">Grand Total</span>
+              <span className="text-xs font-medium text-ink-soft">Tip inc.</span>
               <button
                 type="button"
-                onClick={() => setRoundUp(r => !r)}
+                onClick={() => {
+                  const ru = !roundUp
+                  setRoundUp(ru)
+                  setTipIncAmounts(computeTipInc(customAmounts, tipPct, ru))
+                }}
                 title={roundUp ? 'Round up on' : 'Round up off'}
                 className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-colors ${
                   roundUp ? 'bg-accent border-accent' : 'border-ink-muted bg-white'
@@ -228,17 +250,16 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
               className="input py-3 text-sm font-semibold text-right bg-surface"
               type="text"
               readOnly
-              value={finalTotal > 0 ? `${currency}${fmt(finalTotal)}` : ''}
+              value={finalTotal > 0 ? String(finalTotal) : ''}
               placeholder=""
             />
           </div>
         </div>
 
-        {/* Tip breakdown (compact, only when tip or roundup is active) */}
-        {subtotal > 0 && (tipPct > 0 || roundUpDelta > 0) && (
+        {/* Tip breakdown */}
+        {subtotal > 0 && tipPct > 0 && tipAmount > 0 && (
           <p className="text-xs text-ink-muted -mt-2">
-            {tipPct > 0 && `Subtotal ${currency}${fmt(subtotal)} · Tip ${tipPct}% ${currency}${fmt(tipAmount)}`}
-            {roundUpDelta > 0 && `${tipPct > 0 ? ' · ' : ''}Rounded up +${currency}${fmt(roundUpDelta)}`}
+            Subtotal {currency}{subtotal} · Tip {tipPct}% {currency}{tipAmount}
           </p>
         )}
 
@@ -247,25 +268,23 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           <div className="flex items-center gap-1.5 mb-2">
             <span className="flex-1" />
             <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Ordered</span>
-            <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Total</span>
+            <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Tip inc.</span>
             <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Paid</span>
           </div>
 
           <div className="space-y-2">
             {members.map((m, memberIdx) => {
               const label = m.name + (m.id === currentMemberId ? ' (you)' : '')
-              const share = parseFloat(customAmounts[m.id] || '0')
-              const owes = share > 0 ? Math.ceil(share * (1 + tipPct / 100) * scaleFactor) : 0
               function openCalc() { setCalcOpen(m.id); setCalcExpr('') }
               return (
                 <div key={m.id} className="flex items-center gap-1.5">
                   <span className="text-sm flex-1 truncate min-w-0">{label}</span>
 
-                  {/* Ordered — ceil on change; cascade to following members; double-click/long-press opens calc */}
+                  {/* Ordered — no spinners; cascade to following; double-click/long-press opens calc */}
                   <div className="relative w-16 shrink-0">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
                     <input
-                      className="input pl-5 py-1.5 text-sm w-full"
+                      className="input no-spinner pl-5 py-1.5 text-sm w-full"
                       type="number"
                       step="any"
                       min="0"
@@ -280,15 +299,21 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     />
                   </div>
 
-                  {/* Total (read-only, ceiled) */}
+                  {/* Tip inc. — editable with ±1 spinner */}
                   <div className="relative w-16 shrink-0">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
                     <input
-                      className="input pl-5 py-1.5 text-sm w-full bg-surface text-ink-muted"
-                      type="text"
-                      readOnly
-                      value={owes > 0 ? String(owes) : ''}
+                      className="input pl-5 py-1.5 text-sm w-full"
+                      type="number"
+                      step="1"
+                      min="0"
                       placeholder="0"
+                      value={tipIncAmounts[m.id] ?? ''}
+                      onFocus={selectAll}
+                      onChange={e => {
+                        const val = parseFloat(e.target.value)
+                        setTipIncAmounts(prev => ({ ...prev, [m.id]: val > 0 ? String(Math.ceil(val)) : '' }))
+                      }}
                     />
                   </div>
 
@@ -317,6 +342,25 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
               )
             })}
           </div>
+
+          {/* Total row */}
+          {(subtotal > 0 || finalTotal > 0 || totalPaid > 0) && (
+            <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-border">
+              <span className="text-xs font-semibold text-ink-soft flex-1 text-right">Total</span>
+              <div className="relative w-16 shrink-0">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
+                <input className="input no-spinner pl-5 py-1.5 text-sm w-full bg-surface font-semibold" type="text" readOnly value={subtotal > 0 ? String(subtotal) : ''} placeholder="0" />
+              </div>
+              <div className="relative w-16 shrink-0">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
+                <input className="input no-spinner pl-5 py-1.5 text-sm w-full bg-surface font-semibold" type="text" readOnly value={finalTotal > 0 ? String(finalTotal) : ''} placeholder="0" />
+              </div>
+              <div className="relative w-16 shrink-0">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
+                <input className="input no-spinner pl-5 py-1.5 text-sm w-full bg-surface font-semibold" type="text" readOnly value={totalPaid > 0 ? String(totalPaid) : ''} placeholder="0" />
+              </div>
+            </div>
+          )}
 
           {/* Unassigned indicators */}
           {(Math.abs(orderedUnassigned) >= 0.01 || (finalTotal > 0 && Math.abs(unassigned) >= 0.01)) && (
