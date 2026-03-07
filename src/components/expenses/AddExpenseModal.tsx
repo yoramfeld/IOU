@@ -50,6 +50,8 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
 
   // Disable browser back button while modal is open
   useEffect(() => {
+    // Push two states so a rapid double-tap of Back is also absorbed
+    window.history.pushState(null, '', window.location.href)
     window.history.pushState(null, '', window.location.href)
     const onPop = () => window.history.pushState(null, '', window.location.href)
     window.addEventListener('popstate', onPop)
@@ -151,10 +153,10 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     if (!description.trim()) { setError('Enter a description'); return }
     if (computedCustomSplits.length === 0) { setError('Enter at least one ordered amount'); return }
     if (payers.length === 0) { setError('Enter who paid'); return }
-    if (Math.abs(unassigned) >= 0.01) {
+    if (unassigned !== 0) {
       setError(unassigned > 0
-        ? `${currency}${unassigned.toFixed(2)} still unassigned`
-        : `Paid exceeds total by ${currency}${Math.abs(unassigned).toFixed(2)}`)
+        ? `${currency}${unassigned} still unassigned`
+        : `Paid exceeds total by ${currency}${-unassigned}`)
       return
     }
     setSubmitting(true)
@@ -256,14 +258,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           </div>
         </div>
 
-        {/* Tip breakdown */}
-        {subtotal > 0 && tipPct > 0 && tipAmount > 0 && (
-          <p className="text-xs text-ink-muted -mt-2">
-            Subtotal {currency}{subtotal} · Tip {tipPct}% {currency}{tipAmount}
-          </p>
-        )}
-
-        {/* Member table: Ordered | Owes | Paid */}
+        {/* Member table: Ordered | Tip inc. | Paid */}
         <div>
           <div className="flex items-center gap-1.5 mb-2">
             <span className="flex-1" />
@@ -280,15 +275,16 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                 <div key={m.id} className="flex items-center gap-1.5">
                   <span className="text-sm flex-1 truncate min-w-0">{label}</span>
 
-                  {/* Ordered — no spinners; cascade to following; double-click/long-press opens calc */}
+                  {/* Ordered — disabled until bill is set; no spinners; cascade; double-click/long-press opens calc */}
                   <div className="relative w-16 shrink-0">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
                     <input
-                      className="input no-spinner pl-5 py-1.5 text-sm w-full"
+                      className={`input no-spinner pl-5 py-1.5 text-sm w-full ${!billVal ? 'opacity-40 pointer-events-none' : ''}`}
                       type="number"
                       step="any"
                       min="0"
                       placeholder="0"
+                      disabled={!billVal}
                       value={customAmounts[m.id] ?? ''}
                       onFocus={selectAll}
                       onChange={e => handleOrderedChange(memberIdx, m.id, e.target.value)}
@@ -299,21 +295,16 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     />
                   </div>
 
-                  {/* Tip inc. — editable with ±1 spinner */}
+                  {/* Tip inc. — read-only, greyed */}
                   <div className="relative w-16 shrink-0">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
                     <input
-                      className="input pl-5 py-1.5 text-sm w-full"
-                      type="number"
-                      step="1"
-                      min="0"
+                      className="input no-spinner pl-5 py-1.5 text-xs w-full bg-surface text-ink-muted"
+                      type="text"
+                      readOnly
+                      tabIndex={-1}
                       placeholder="0"
                       value={tipIncAmounts[m.id] ?? ''}
-                      onFocus={selectAll}
-                      onChange={e => {
-                        const val = parseFloat(e.target.value)
-                        setTipIncAmounts(prev => ({ ...prev, [m.id]: val > 0 ? String(Math.ceil(val)) : '' }))
-                      }}
                     />
                   </div>
 
@@ -343,48 +334,16 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
             })}
           </div>
 
-          {/* Total row */}
-          {(subtotal > 0 || finalTotal > 0 || totalPaid > 0) && (
-            <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-border">
-              <span className="text-xs font-semibold text-ink-soft flex-1 text-right">Total</span>
-              <div className="relative w-16 shrink-0">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
-                <input className="input no-spinner pl-5 py-1.5 text-sm w-full bg-surface font-semibold" type="text" readOnly value={subtotal > 0 ? String(subtotal) : ''} placeholder="0" />
-              </div>
-              <div className="relative w-16 shrink-0">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
-                <input className="input no-spinner pl-5 py-1.5 text-sm w-full bg-surface font-semibold" type="text" readOnly value={finalTotal > 0 ? String(finalTotal) : ''} placeholder="0" />
-              </div>
-              <div className="relative w-16 shrink-0">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
-                <input className="input no-spinner pl-5 py-1.5 text-sm w-full bg-surface font-semibold" type="text" readOnly value={totalPaid > 0 ? String(totalPaid) : ''} placeholder="0" />
-              </div>
-            </div>
-          )}
-
-          {/* Unassigned indicators */}
-          {(Math.abs(orderedUnassigned) >= 0.01 || (finalTotal > 0 && Math.abs(unassigned) >= 0.01)) && (
-            <div className="flex justify-end mt-2 gap-2">
-              {Math.abs(orderedUnassigned) >= 0.01 && (
-                <span className="text-xs font-medium text-ink-muted w-16 text-center">
-                  {orderedUnassigned > 0
-                    ? `${currency}${orderedUnassigned.toFixed(2)} left`
-                    : `+${currency}${Math.abs(orderedUnassigned).toFixed(2)}`}
-                </span>
-              )}
-              {Math.abs(orderedUnassigned) < 0.01 && finalTotal > 0 && Math.abs(unassigned) >= 0.01 && (
-                <span className="w-16" />
-              )}
-              {finalTotal > 0 && Math.abs(unassigned) >= 0.01 && (
-                <>
-                  <span className="w-16" />
-                  <span className="text-xs font-medium text-ink-muted w-16 text-center">
-                    {unassigned > 0
-                      ? `${currency}${unassigned.toFixed(2)} left`
-                      : `+${currency}${Math.abs(unassigned).toFixed(2)}`}
-                  </span>
-                </>
-              )}
+          {/* Per-column left/over indicators */}
+          {(orderedUnassigned !== 0 || unassigned !== 0) && (
+            <div className="flex justify-end mt-1 gap-1.5">
+              <span className="w-16 shrink-0 text-xs text-center text-ink-muted">
+                {orderedUnassigned !== 0 ? (orderedUnassigned > 0 ? `${orderedUnassigned} left` : `+${-orderedUnassigned} over`) : ''}
+              </span>
+              <span className="w-16 shrink-0" />
+              <span className="w-16 shrink-0 text-xs text-center text-ink-muted">
+                {unassigned !== 0 && finalTotal > 0 ? (unassigned > 0 ? `${unassigned} left` : `+${-unassigned} over`) : ''}
+              </span>
             </div>
           )}
         </div>
@@ -437,7 +396,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           onClick={handleSubmit}
           disabled={submitting}
           className={`btn ${
-            payers.length > 0 && Math.abs(unassigned) >= 0.01
+            payers.length > 0 && unassigned !== 0
               ? 'btn-danger'
               : description.trim() && computedCustomSplits.length > 0 && payers.length > 0
                 ? 'btn-success'
