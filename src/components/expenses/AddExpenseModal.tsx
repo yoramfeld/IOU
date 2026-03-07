@@ -301,6 +301,11 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                       min="0"
                       placeholder="0.00"
                       value={paidAmounts[m.id] ?? ''}
+                      onFocus={() => {
+                        if ((parseFloat(paidAmounts[m.id]) || 0) === 0 && unassigned > 0) {
+                          setPaidAmounts(prev => ({ ...prev, [m.id]: unassigned.toFixed(2) }))
+                        }
+                      }}
                       onChange={e => setPaidAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
                     />
                   </div>
