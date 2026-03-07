@@ -49,7 +49,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     try { localStorage.setItem('iou_tip_pct', String(pct)) } catch {}
   }
 
-  // When bill changes, recalculate equal Ordered shares for all members
+  // When bill changes, recalculate equal Ordered shares; clear when empty
   function handleBillChange(value: string) {
     setAmount(value)
     const billVal = parseFloat(value) || 0
@@ -58,6 +58,8 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
       const newAmounts: Record<string, string> = {}
       for (const m of members) newAmounts[m.id] = fmt(share)
       setCustomAmounts(newAmounts)
+    } else {
+      setCustomAmounts({})
     }
   }
 
@@ -138,39 +140,35 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           />
         </div>
 
-        {/* Bill */}
-        <div>
-          <label className="text-xs font-medium text-ink-soft block mb-2">Bill</label>
-          <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-muted text-sm">{currency}</span>
-            <input
-              className="input pl-8"
-              type="number"
-              step="any"
-              min="0"
-              placeholder="0"
-              value={amount}
-              onFocus={selectAll}
-              onChange={e => handleBillChange(e.target.value)}
-            />
+        {/* Bill + Tip on one row */}
+        <div className="flex gap-3 items-end">
+          <div className="w-1/4">
+            <label className="text-xs font-medium text-ink-soft block mb-2">Bill</label>
+            <div className="relative">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
+              <input
+                className="input pl-5 pr-1"
+                type="number"
+                step="any"
+                min="0"
+                placeholder="0"
+                value={amount}
+                onFocus={selectAll}
+                onChange={e => handleBillChange(e.target.value)}
+              />
+            </div>
           </div>
-        </div>
-
-        {/* Tip */}
-        <div>
-          <label className="text-xs font-medium text-ink-soft block mb-2">Tip</label>
-          <div className="flex gap-2">
-            {TIP_OPTIONS.map(pct => (
-              <button
-                key={pct}
-                onClick={() => handleTipChange(pct)}
-                className={`flex-1 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                  tipPct === pct ? 'bg-accent text-white border-accent' : 'border-border text-ink-muted hover:bg-surface'
-                }`}
-              >
-                {pct}%
-              </button>
-            ))}
+          <div className="flex-1">
+            <label className="text-xs font-medium text-ink-soft block mb-2">Tip</label>
+            <select
+              className="input"
+              value={tipPct}
+              onChange={e => handleTipChange(Number(e.target.value))}
+            >
+              {TIP_OPTIONS.map(pct => (
+                <option key={pct} value={pct}>{pct}%</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -305,9 +303,11 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           onClick={handleSubmit}
           disabled={submitting}
           className={`btn ${
-            description.trim() && computedCustomSplits.length > 0 && payers.length > 0 && Math.abs(unassigned) < 0.01
-              ? 'btn-success'
-              : 'btn-primary'
+            payers.length > 0 && Math.abs(unassigned) >= 0.01
+              ? 'btn-danger'
+              : description.trim() && computedCustomSplits.length > 0 && payers.length > 0
+                ? 'btn-success'
+                : 'btn-primary'
           }`}
         >
           {submitting ? 'Submitting...' : 'Submit'}
