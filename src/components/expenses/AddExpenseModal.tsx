@@ -86,6 +86,10 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
       amount: Math.round(parseFloat(v) * (1 + tipPct / 100) * scaleFactor * 100) / 100,
     }))
 
+  // --- Ordered unassigned (vs bill) ---
+  const billVal = parseFloat(amount) || 0
+  const orderedUnassigned = billVal > 0 ? Math.round((billVal - subtotal) * 100) / 100 : 0
+
   // --- Paid ---
   const totalPaid = members.reduce((s, m) => s + (parseFloat(paidAmounts[m.id]) || 0), 0)
   const unassigned = Math.round((finalTotal - totalPaid) * 100) / 100
@@ -191,9 +195,13 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                 {roundUp && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
               </button>
             </div>
-            <div className="input py-3 text-sm font-semibold text-right">
-              {finalTotal > 0 ? `${currency}${fmt(finalTotal)}` : ''}
-            </div>
+            <input
+              className="input py-3 text-sm font-semibold text-right bg-surface"
+              type="text"
+              readOnly
+              value={finalTotal > 0 ? `${currency}${fmt(finalTotal)}` : ''}
+              placeholder=""
+            />
           </div>
         </div>
 
@@ -285,14 +293,29 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
             })}
           </div>
 
-          {/* Unassigned indicator — only shown when there's a mismatch */}
-          {finalTotal > 0 && Math.abs(unassigned) >= 0.01 && (
-            <div className="flex justify-end mt-2">
-              <span className="text-xs font-medium text-ink-muted">
-                {unassigned > 0
-                  ? `${currency}${unassigned.toFixed(2)} unassigned`
-                  : `Over by ${currency}${Math.abs(unassigned).toFixed(2)}`}
-              </span>
+          {/* Unassigned indicators */}
+          {(Math.abs(orderedUnassigned) >= 0.01 || (finalTotal > 0 && Math.abs(unassigned) >= 0.01)) && (
+            <div className="flex justify-end mt-2 gap-2">
+              {Math.abs(orderedUnassigned) >= 0.01 && (
+                <span className="text-xs font-medium text-ink-muted w-16 text-center">
+                  {orderedUnassigned > 0
+                    ? `${currency}${orderedUnassigned.toFixed(2)} left`
+                    : `+${currency}${Math.abs(orderedUnassigned).toFixed(2)}`}
+                </span>
+              )}
+              {Math.abs(orderedUnassigned) < 0.01 && finalTotal > 0 && Math.abs(unassigned) >= 0.01 && (
+                <span className="w-16" />
+              )}
+              {finalTotal > 0 && Math.abs(unassigned) >= 0.01 && (
+                <>
+                  <span className="w-16" />
+                  <span className="text-xs font-medium text-ink-muted w-16 text-center">
+                    {unassigned > 0
+                      ? `${currency}${unassigned.toFixed(2)} left`
+                      : `+${currency}${Math.abs(unassigned).toFixed(2)}`}
+                  </span>
+                </>
+              )}
             </div>
           )}
         </div>
