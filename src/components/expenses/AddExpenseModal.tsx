@@ -142,7 +142,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
 
         {/* Bill | Tip | Total+Roundup */}
         <div className="flex gap-2 items-end">
-          <div className="w-1/4">
+          <div className="w-[30%]">
             <label className="text-xs font-medium text-ink-soft block mb-2">Bill</label>
             <div className="relative">
               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
@@ -158,7 +158,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
               />
             </div>
           </div>
-          <div className="w-1/4">
+          <div className="w-1/5">
             <label className="text-xs font-medium text-ink-soft block mb-2">Tip</label>
             <select
               className="input px-2"
@@ -269,15 +269,13 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
             })}
           </div>
 
-          {/* Unassigned indicator */}
-          {finalTotal > 0 && (
+          {/* Unassigned indicator — only shown when there's a mismatch */}
+          {finalTotal > 0 && Math.abs(unassigned) >= 0.01 && (
             <div className="flex justify-end mt-2">
-              <span className={`text-xs font-medium ${Math.abs(unassigned) < 0.01 ? 'text-green' : 'text-ink-muted'}`}>
-                {Math.abs(unassigned) < 0.01
-                  ? 'Fully assigned'
-                  : unassigned > 0
-                    ? `${currency}${unassigned.toFixed(2)} unassigned`
-                    : `Over by ${currency}${Math.abs(unassigned).toFixed(2)}`}
+              <span className="text-xs font-medium text-ink-muted">
+                {unassigned > 0
+                  ? `${currency}${unassigned.toFixed(2)} unassigned`
+                  : `Over by ${currency}${Math.abs(unassigned).toFixed(2)}`}
               </span>
             </div>
           )}
