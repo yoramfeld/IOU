@@ -52,18 +52,46 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     try { localStorage.setItem('iou_tip_pct', String(pct)) } catch {}
   }
 
-  // When bill changes, recalculate equal Ordered shares; clear when empty
   function parseSum(expr: string): number {
     return expr.split('+').reduce((s, v) => s + (parseFloat(v.trim()) || 0), 0)
   }
 
+  // Distribute bill from pivotIdx onward with ceil integers; members before pivot are untouched
+  function distributeFromPivot(
+    pivotIdx: number,
+    pivotVal: number,
+    prev: Record<string, string>,
+    billRef: number
+  ): Record<string, string> {
+    const ceiled = pivotVal > 0 ? Math.ceil(pivotVal) : 0
+    const fixedSum = members.slice(0, pivotIdx).reduce((s, m) => s + (parseFloat(prev[m.id]) || 0), 0)
+    let remaining = billRef - fixedSum - ceiled
+    const result: Record<string, string> = { ...prev, [members[pivotIdx].id]: ceiled > 0 ? String(ceiled) : '' }
+    const following = members.slice(pivotIdx + 1)
+    for (let i = 0; i < following.length; i++) {
+      if (remaining <= 0) {
+        result[following[i].id] = ''
+      } else {
+        const share = Math.ceil(remaining / (following.length - i))
+        result[following[i].id] = String(share)
+        remaining -= share
+      }
+    }
+    return result
+  }
+
   function handleBillChange(value: string) {
     setAmount(value)
-    const billVal = parseFloat(value) || 0
-    if (billVal > 0) {
-      const share = Math.round((billVal / members.length) * 100) / 100
+    const billRef = parseFloat(value) || 0
+    if (billRef > 0) {
       const newAmounts: Record<string, string> = {}
-      for (const m of members) newAmounts[m.id] = fmt(share)
+      let remaining = billRef
+      for (let i = 0; i < members.length; i++) {
+        if (remaining <= 0) { newAmounts[members[i].id] = ''; continue }
+        const share = Math.ceil(remaining / (members.length - i))
+        newAmounts[members[i].id] = String(share)
+        remaining -= share
+      }
       setCustomAmounts(newAmounts)
     } else {
       setCustomAmounts({})
@@ -183,7 +211,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-1.5 mb-2">
-              <span className="text-xs font-medium text-ink-soft">Total</span>
+              <span className="text-xs font-medium text-ink-soft">Grand Total</span>
               <button
                 type="button"
                 onClick={() => setRoundUp(r => !r)}
@@ -223,35 +251,31 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           </div>
 
           <div className="space-y-2">
-            {members.map(m => {
+            {members.map((m, memberIdx) => {
               const label = m.name + (m.id === currentMemberId ? ' (you)' : '')
               const share = parseFloat(customAmounts[m.id] || '0')
-              const owes = share > 0 ? Math.round(share * (1 + tipPct / 100) * scaleFactor * 100) / 100 : 0
+              const owes = share > 0 ? Math.ceil(share * (1 + tipPct / 100) * scaleFactor) : 0
+              const billRef = parseFloat(amount) || 0
               function openCalc() { setCalcOpen(m.id); setCalcExpr('') }
               return (
                 <div key={m.id} className="flex items-center gap-1.5">
                   <span className="text-sm flex-1 truncate min-w-0">{label}</span>
 
-                  {/* Ordered — double-click or long-press opens calculator */}
+                  {/* Ordered — ceil on change; cascade to following members; double-click/long-press opens calc */}
                   <div className="relative w-16 shrink-0">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
                     <input
                       className="input pl-5 py-1.5 text-sm w-full"
                       type="number"
-                      step="any"
+                      step="1"
                       min="0"
                       placeholder="0"
                       value={customAmounts[m.id] ?? ''}
-                      onFocus={e => {
-                        const ref = parseFloat(amount) || 0
-                        const others = Object.entries(customAmounts)
-                          .filter(([id]) => id !== m.id)
-                          .reduce((s, [, v]) => s + (parseFloat(v) || 0), 0)
-                        const remaining = Math.max(0, Math.round((ref - others) * 100) / 100)
-                        if (remaining > 0) setCustomAmounts(prev => ({ ...prev, [m.id]: fmt(remaining) }))
-                        selectAll(e)
+                      onFocus={selectAll}
+                      onChange={e => {
+                        const val = parseFloat(e.target.value) || 0
+                        setCustomAmounts(prev => distributeFromPivot(memberIdx, val, prev, billRef))
                       }}
-                      onChange={e => setCustomAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
                       onDoubleClick={openCalc}
                       onPointerDown={() => { longPressTimer.current = setTimeout(openCalc, 500) }}
                       onPointerUp={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
@@ -259,33 +283,37 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     />
                   </div>
 
-                  {/* Total (read-only) */}
+                  {/* Total (read-only, ceiled) */}
                   <div className="relative w-16 shrink-0">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
                     <input
                       className="input pl-5 py-1.5 text-sm w-full bg-surface text-ink-muted"
                       type="text"
                       readOnly
-                      value={owes > 0 ? fmt(owes) : ''}
+                      value={owes > 0 ? String(owes) : ''}
                       placeholder="0"
                     />
                   </div>
 
-                  {/* Paid */}
+                  {/* Paid — ceil on blur; snap to ceil(unassigned) on focus */}
                   <div className="relative w-16 shrink-0">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
                     <input
                       className="input pl-5 py-1.5 text-sm w-full"
                       type="number"
-                      step="any"
+                      step="1"
                       min="0"
                       placeholder="0"
                       value={paidAmounts[m.id] ?? ''}
                       onFocus={e => {
-                        if (unassigned > 0) setPaidAmounts(prev => ({ ...prev, [m.id]: fmt(unassigned) }))
+                        if (unassigned > 0) setPaidAmounts(prev => ({ ...prev, [m.id]: String(Math.ceil(unassigned)) }))
                         selectAll(e)
                       }}
                       onChange={e => setPaidAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
+                      onBlur={e => {
+                        const val = parseFloat(e.target.value)
+                        if (val > 0) setPaidAmounts(prev => ({ ...prev, [m.id]: String(Math.ceil(val)) }))
+                      }}
                     />
                   </div>
                 </div>
