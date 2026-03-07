@@ -25,7 +25,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [tipPct, setTipPct] = useState(0)
-  const [roundUp, setRoundUp] = useState(false)
+  const [roundUp, setRoundUp] = useState(true)
   const [splitMode, setSplitMode] = useState<'equal' | 'custom'>('equal')
   const [splitAmong, setSplitAmong] = useState<string[]>(members.map(m => m.id))
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({})
@@ -73,11 +73,15 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const paidBy = payers[0]?.memberId ?? currentMemberId
 
   // --- Actions ---
+  function fmt(n: number) {
+    return Number.isInteger(n) ? String(n) : n.toFixed(2)
+  }
+
   function switchToCustom() {
     const share = splitAmong.length > 0 ? (parseFloat(amount) || 0) / splitAmong.length : 0
     const initial: Record<string, string> = {}
     for (const m of members) {
-      initial[m.id] = splitAmong.includes(m.id) ? share.toFixed(2) : '0.00'
+      initial[m.id] = splitAmong.includes(m.id) ? fmt(share) : '0'
     }
     setCustomAmounts(initial)
     setSplitMode('custom')
@@ -157,9 +161,9 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
             <input
               className="input pl-8"
               type="number"
-              step="0.01"
+              step="any"
               min="0"
-              placeholder="0.00"
+              placeholder="0"
               value={amount}
               onChange={e => setAmount(e.target.value)}
             />
@@ -287,9 +291,9 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                         <input
                           className="input pl-5 py-1.5 text-sm w-full"
                           type="number"
-                          step="0.01"
+                          step="any"
                           min="0"
-                          placeholder="0.00"
+                          placeholder="0"
                           value={customAmounts[m.id] ?? ''}
                           onChange={e => setCustomAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
                         />
@@ -303,13 +307,13 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     <input
                       className="input pl-5 py-1.5 text-sm w-full"
                       type="number"
-                      step="0.01"
+                      step="any"
                       min="0"
-                      placeholder="0.00"
+                      placeholder="0"
                       value={paidAmounts[m.id] ?? ''}
                       onFocus={() => {
-                        if ((parseFloat(paidAmounts[m.id]) || 0) === 0 && unassigned > 0) {
-                          setPaidAmounts(prev => ({ ...prev, [m.id]: unassigned.toFixed(2) }))
+                        if (unassigned > 0) {
+                          setPaidAmounts(prev => ({ ...prev, [m.id]: fmt(unassigned) }))
                         }
                       }}
                       onChange={e => setPaidAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
