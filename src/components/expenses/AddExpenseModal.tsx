@@ -327,7 +327,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     return (
                       <div className="relative w-20 shrink-0">
                         {isApprox && (
-                          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-amber-500 font-bold text-sm select-none">~</span>
+                          <span className="absolute left-1 top-1/2 -translate-y-1/2 text-amber-500 font-bold text-[21px] leading-none select-none">~</span>
                         )}
                         <input
                           className={`input no-spinner py-1.5 text-sm w-full ${isApprox ? 'pl-5' : 'pl-3'} ${!billVal || excluded.has(m.id) ? 'opacity-40 pointer-events-none' : ''}`}
@@ -356,7 +356,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     return (
                       <div className="w-10 shrink-0 text-center">
                         <span className="text-[10px] text-ink-muted">
-                          {raw > 0 ? (isApprox ? <><span className="text-amber-500 font-bold text-xs">~</span>{rounded2}</> : String(rounded2)) : ''}
+                          {raw > 0 ? (isApprox ? `${rounded2}…` : String(rounded2)) : ''}
                         </span>
                       </div>
                     )
