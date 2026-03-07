@@ -14,6 +14,7 @@ interface Props {
     description: string
     splitAmong: string[]
     customSplits?: { memberId: string; amount: number }[]
+    payers: { memberId: string; amount: number }[]
   }) => Promise<void>
   onClose: () => void
 }
@@ -28,6 +29,8 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const [splitMode, setSplitMode] = useState<'equal' | 'custom'>('equal')
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({})
   const [tipPct, setTipPct] = useState(0)
+  const [roundUp, setRoundUp] = useState(false)
+  const [otherPayers, setOtherPayers] = useState<{ memberId: string; amount: string }[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -38,7 +41,6 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   }
 
   function switchToCustom() {
-    // Pre-populate with equal share
     const numAmount = parseFloat(amount) || 0
     const share = splitAmong.length > 0 ? numAmount / splitAmong.length : 0
     const initial: Record<string, string> = {}
@@ -60,12 +62,17 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const totalAmount = Math.round(subtotal * (1 + tipPct / 100) * 100) / 100
   const tipAmount = Math.round((totalAmount - subtotal) * 100) / 100
 
+  const finalTotal = roundUp ? Math.ceil(totalAmount) : totalAmount
+  const roundUpDelta = Math.round((finalTotal - totalAmount) * 100) / 100
+
+  const scaleFactor = totalAmount > 0 ? finalTotal / totalAmount : 1
+
   const computedCustomSplits = splitMode === 'custom'
     ? Object.entries(customAmounts)
         .filter(([, v]) => parseFloat(v) > 0)
         .map(([memberId, v]) => ({
           memberId,
-          amount: Math.round(parseFloat(v) * (1 + tipPct / 100) * 100) / 100,
+          amount: Math.round(parseFloat(v) * (1 + tipPct / 100) * scaleFactor * 100) / 100,
         }))
     : undefined
 
@@ -73,9 +80,33 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     ? splitAmong
     : (computedCustomSplits?.map(s => s.memberId) ?? [])
 
-  const perPerson = effectiveSplitAmong.length > 0 && totalAmount > 0
-    ? (totalAmount / effectiveSplitAmong.length).toFixed(2)
+  const perPerson = effectiveSplitAmong.length > 0 && finalTotal > 0
+    ? (finalTotal / effectiveSplitAmong.length).toFixed(2)
     : '0.00'
+
+  // Multi-payer derived values
+  const otherPayersSum = otherPayers.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
+  const primaryAmount = Math.round((finalTotal - otherPayersSum) * 100) / 100
+
+  const allPayerIds = new Set([paidBy, ...otherPayers.map(p => p.memberId)])
+  const availableForNew = members.filter(m => !allPayerIds.has(m.id))
+
+  function addOtherPayer() {
+    if (availableForNew.length === 0) return
+    setOtherPayers(prev => [...prev, { memberId: availableForNew[0].id, amount: '' }])
+  }
+
+  function removeOtherPayer(idx: number) {
+    setOtherPayers(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  function updateOtherPayerMember(idx: number, memberId: string) {
+    setOtherPayers(prev => prev.map((p, i) => i === idx ? { ...p, memberId } : p))
+  }
+
+  function updateOtherPayerAmount(idx: number, amount: string) {
+    setOtherPayers(prev => prev.map((p, i) => i === idx ? { ...p, amount } : p))
+  }
 
   async function handleSubmit() {
     if (!description.trim()) {
@@ -99,15 +130,35 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
       }
     }
 
+    if (primaryAmount <= 0) {
+      setError('Other payer amounts exceed total')
+      return
+    }
+
+    // Check for duplicate payer members
+    const payerMemberIds = [paidBy, ...otherPayers.map(p => p.memberId)]
+    if (new Set(payerMemberIds).size !== payerMemberIds.length) {
+      setError('Duplicate payers')
+      return
+    }
+
+    const allPayers = [
+      { memberId: paidBy, amount: primaryAmount },
+      ...otherPayers
+        .filter(p => parseFloat(p.amount) > 0)
+        .map(p => ({ memberId: p.memberId, amount: Math.round(parseFloat(p.amount) * 100) / 100 })),
+    ]
+
     setSubmitting(true)
     setError('')
     try {
       await onSubmit({
         paidBy,
-        amount: totalAmount,
+        amount: finalTotal,
         description: description.trim(),
         splitAmong: effectiveSplitAmong,
         customSplits: computedCustomSplits,
+        payers: allPayers,
       })
       onClose()
     } catch {
@@ -132,19 +183,83 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           autoFocus
         />
 
+        {/* Who paid? */}
         <div>
           <label className="text-xs font-medium text-ink-soft block mb-2">Who paid?</label>
-          <select
-            className="input"
-            value={paidBy}
-            onChange={e => setPaidBy(e.target.value)}
-          >
-            {members.map(m => (
-              <option key={m.id} value={m.id}>
-                {m.name}{m.id === currentMemberId ? ' (you)' : ''}
-              </option>
-            ))}
-          </select>
+          <div className="space-y-2">
+            {/* Primary payer row */}
+            <div className="flex items-center gap-2">
+              <select
+                className="input flex-1"
+                value={paidBy}
+                onChange={e => setPaidBy(e.target.value)}
+              >
+                {members.filter(m => !otherPayers.some(p => p.memberId === m.id)).map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}{m.id === currentMemberId ? ' (you)' : ''}
+                  </option>
+                ))}
+              </select>
+              <div className="relative w-28 shrink-0">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted text-sm">{currency}</span>
+                <input
+                  className="input pl-7 py-1.5 text-sm bg-surface text-ink-muted"
+                  type="text"
+                  readOnly
+                  value={finalTotal > 0 ? primaryAmount.toFixed(2) : ''}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            {/* Additional payer rows */}
+            {otherPayers.map((p, idx) => {
+              const availableForRow = members.filter(m => m.id === p.memberId || !allPayerIds.has(m.id) || !otherPayers.some((op, oi) => oi !== idx && op.memberId === m.id))
+              return (
+                <div key={idx} className="flex items-center gap-2">
+                  <select
+                    className="input flex-1"
+                    value={p.memberId}
+                    onChange={e => updateOtherPayerMember(idx, e.target.value)}
+                  >
+                    {members.filter(m => m.id === p.memberId || (m.id !== paidBy && !otherPayers.some((op, oi) => oi !== idx && op.memberId === m.id))).map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}{m.id === currentMemberId ? ' (you)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="relative w-28 shrink-0">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted text-sm">{currency}</span>
+                    <input
+                      className="input pl-7 py-1.5 text-sm"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={p.amount}
+                      onChange={e => updateOtherPayerAmount(idx, e.target.value)}
+                    />
+                  </div>
+                  <button
+                    onClick={() => removeOtherPayer(idx)}
+                    className="text-ink-muted hover:text-red text-lg leading-none shrink-0"
+                  >
+                    &times;
+                  </button>
+                </div>
+              )
+            })}
+
+            {/* Add payer button */}
+            {availableForNew.length > 0 && (
+              <button
+                onClick={addOtherPayer}
+                className="text-xs text-accent hover:underline"
+              >
+                + Add payer
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Split mode tabs */}
@@ -257,11 +372,26 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                 <span>{currency}{tipAmount.toFixed(2)}</span>
               </div>
             )}
+            {/* Round up toggle */}
+            <div className="flex justify-between items-center text-ink-muted">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={roundUp}
+                  onChange={e => setRoundUp(e.target.checked)}
+                  className="w-4 h-4"
+                />
+                <span>Round up</span>
+              </label>
+              {roundUp && roundUpDelta > 0 && (
+                <span className="text-xs">(+{currency}{roundUpDelta.toFixed(2)})</span>
+              )}
+            </div>
             <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1">
               <span>Total</span>
-              <span>{currency}{totalAmount.toFixed(2)}</span>
+              <span>{currency}{finalTotal.toFixed(2)}</span>
             </div>
-            {splitMode === 'equal' && effectiveSplitAmong.length > 1 && totalAmount > 0 && (
+            {splitMode === 'equal' && effectiveSplitAmong.length > 1 && finalTotal > 0 && (
               <p className="text-xs text-ink-muted">{currency}{perPerson} each</p>
             )}
           </div>

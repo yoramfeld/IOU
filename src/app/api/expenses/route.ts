@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await supabase
     .from('expenses')
-    .select('*, splits:expense_splits(*)')
+    .select('*, splits:expense_splits(*), payers:expense_payers(*)')
     .eq('group_id', groupId)
     .order('created_at', { ascending: false })
 
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy } = await request.json()
+  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy, payers } = await request.json()
 
   const hasCustom = Array.isArray(customSplits) && customSplits.length > 0
   if (!groupId || !paidBy || !amount || !description?.trim() || !enteredBy) {
@@ -39,6 +39,15 @@ export async function POST(request: Request) {
 
   if (amount <= 0) {
     return NextResponse.json({ error: 'Amount must be positive' }, { status: 400 })
+  }
+
+  // Validate payers if provided
+  const resolvedPayers: { memberId: string; amount: number }[] = Array.isArray(payers) && payers.length > 0
+    ? payers
+    : [{ memberId: paidBy, amount: Number(amount) }]
+
+  if (resolvedPayers.some(p => p.amount <= 0)) {
+    return NextResponse.json({ error: 'Payer amounts must be positive' }, { status: 400 })
   }
 
   const supabase = createServiceClient()
@@ -56,12 +65,12 @@ export async function POST(request: Request) {
     }
   }
 
-  // Create expense
+  // Create expense (paid_by = primary payer for display)
   const { data: expense, error: expErr } = await supabase
     .from('expenses')
     .insert({
       group_id: groupId,
-      paid_by: paidBy,
+      paid_by: resolvedPayers[0].memberId,
       amount: Number(amount),
       description: description.trim(),
       entered_by: enteredBy,
@@ -73,25 +82,93 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to create expense' }, { status: 500 })
   }
 
+  // Insert payers
+  const payerRows = resolvedPayers.map(p => ({
+    expense_id: expense.id,
+    member_id: p.memberId,
+    amount: Math.round(p.amount * 100) / 100,
+  }))
+
+  const { error: payerErr } = await supabase.from('expense_payers').insert(payerRows)
+
+  if (payerErr) {
+    await supabase.from('expenses').delete().eq('id', expense.id)
+    return NextResponse.json({ error: 'Failed to create payers' }, { status: 500 })
+  }
+
   // Create splits
-  const splits = hasCustom
-    ? customSplits.map(({ memberId, amount: a }: { memberId: string; amount: number }) => ({
-        expense_id: expense.id,
-        member_id: memberId,
-        amount: -Math.round(a * 100) / 100,
-      }))
-    : splitAmong.map((memberId: string) => ({
-        expense_id: expense.id,
-        member_id: memberId,
-        amount: Math.round(-(Number(amount) / splitAmong.length) * 100) / 100,
-      }))
+  let splits: { expense_id: string; member_id: string; amount: number }[]
+
+  if (hasCustom) {
+    splits = customSplits.map(({ memberId, amount: a }: { memberId: string; amount: number }) => ({
+      expense_id: expense.id,
+      member_id: memberId,
+      amount: -Math.round(a * 100) / 100,
+    }))
+  } else {
+    const totalCents = Math.round(Number(amount) * 100)
+    const n = splitAmong.length
+    const baseCents = Math.floor(totalCents / n)
+    const remainder = totalCents - baseCents * n
+
+    // Determine which members absorb the remainder cents.
+    // Give each extra cent to whoever currently owes the most to the group.
+    // Randomize within a tied tier.
+    const remainderSet = new Set<string>()
+    if (remainder > 0) {
+      const { data: groupExpenses } = await supabase
+        .from('expenses')
+        .select('expense_payers(member_id, amount), expense_splits(member_id, amount)')
+        .eq('group_id', groupId)
+
+      const bal: Record<string, number> = {}
+      for (const id of splitAmong) bal[id] = 0
+      for (const e of (groupExpenses ?? []) as { expense_payers: { member_id: string; amount: number }[]; expense_splits: { member_id: string; amount: number }[] }[]) {
+        for (const p of e.expense_payers) {
+          if (p.member_id in bal) bal[p.member_id] += Number(p.amount)
+        }
+        for (const s of e.expense_splits) {
+          if (s.member_id in bal) bal[s.member_id] += Number(s.amount)
+        }
+      }
+
+      // Sort ascending: most negative balance = owes most
+      const sorted = [...splitAmong].sort((a, b) => bal[a] - bal[b])
+
+      let assigned = 0
+      let i = 0
+      while (assigned < remainder && i < sorted.length) {
+        const tierBal = bal[sorted[i]]
+        let j = i
+        while (j < sorted.length && bal[sorted[j]] === tierBal) j++
+        const tier = sorted.slice(i, j)
+        const needed = remainder - assigned
+        if (tier.length <= needed) {
+          for (const id of tier) remainderSet.add(id)
+          assigned += tier.length
+        } else {
+          // Randomize within the tied tier
+          const shuffled = [...tier].sort(() => Math.random() - 0.5)
+          for (const id of shuffled.slice(0, needed)) remainderSet.add(id)
+          assigned = remainder
+        }
+        i = j
+      }
+    }
+
+    splits = splitAmong.map((memberId: string) => ({
+      expense_id: expense.id,
+      member_id: memberId,
+      amount: -(baseCents + (remainderSet.has(memberId) ? 1 : 0)) / 100,
+    }))
+  }
 
   const { error: splitErr } = await supabase
     .from('expense_splits')
     .insert(splits)
 
   if (splitErr) {
-    // Rollback expense
+    // Rollback expense (cascade deletes payers too)
     await supabase.from('expenses').delete().eq('id', expense.id)
     return NextResponse.json({ error: 'Failed to create splits' }, { status: 500 })
   }

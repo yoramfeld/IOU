@@ -23,9 +23,17 @@ export interface Expense {
   description: string
   entered_by: string
   created_at: string
+  payers?: ExpensePayer[]
 }
 
 export interface ExpenseSplit {
+  id: string
+  expense_id: string
+  member_id: string
+  amount: number
+}
+
+export interface ExpensePayer {
   id: string
   expense_id: string
   member_id: string

@@ -9,13 +9,13 @@ import AdminModeToggle from '@/components/ui/AdminModeToggle'
 import ExpenseList from '@/components/expenses/ExpenseList'
 import AddExpenseModal from '@/components/expenses/AddExpenseModal'
 import QRModal from '@/components/ui/QRModal'
-import type { Expense, ExpenseSplit, Member } from '@/types'
+import type { Expense, ExpensePayer, ExpenseSplit, Member } from '@/types'
 
 export default function ExpensesPage() {
   const router = useRouter()
   const { session, loading, logout } = useSession()
   const { adminMode, setAdminMode, loaded: adminLoaded } = useAdminMode()
-  const [expenses, setExpenses] = useState<(Expense & { splits: ExpenseSplit[] })[]>([])
+  const [expenses, setExpenses] = useState<(Expense & { splits: ExpenseSplit[]; payers: ExpensePayer[] })[]>([])
   const [members, setMembers] = useState<Member[]>([])
   const [showModal, setShowModal] = useState(false)
   const [showQRModal, setShowQRModal] = useState(false)
@@ -44,7 +44,7 @@ export default function ExpensesPage() {
     if (session) fetchData()
   }, [session, loading, router, fetchData])
 
-  async function handleAddExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[] }) {
+  async function handleAddExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[] }) {
     if (!session) return
     const res = await fetch('/api/expenses', {
       method: 'POST',
@@ -56,6 +56,7 @@ export default function ExpensesPage() {
         description: data.description,
         splitAmong: data.splitAmong,
         customSplits: data.customSplits,
+        payers: data.payers,
         enteredBy: session.memberId,
       }),
     })
@@ -81,13 +82,17 @@ export default function ExpensesPage() {
     // Expenses are newest-first, iterate in reverse for oldest-first
     for (let i = expenses.length - 1; i >= 0; i--) {
       const exp = expenses[i]
-      // Payer gains the full amount
-      balances[exp.paid_by] = (balances[exp.paid_by] || 0) + Number(exp.amount)
+      // Each payer gains their contributed amount
+      for (const p of (exp.payers ?? [])) {
+        balances[p.member_id] = (balances[p.member_id] || 0) + Number(p.amount)
+      }
       // Each split member loses their share
       for (const s of exp.splits) {
         balances[s.member_id] = (balances[s.member_id] || 0) + Number(s.amount) // amount is negative
       }
-      map[exp.id] = Math.round((balances[exp.paid_by] || 0) * 100) / 100
+      // Show running balance of primary payer (first payer or paid_by)
+      const primaryPayerId = exp.payers?.[0]?.member_id ?? exp.paid_by
+      map[exp.id] = Math.round((balances[primaryPayerId] || 0) * 100) / 100
     }
     return map
   }, [expenses])

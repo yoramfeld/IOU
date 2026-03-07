@@ -1,10 +1,10 @@
 'use client'
 
-import type { Expense, ExpenseSplit, Member } from '@/types'
+import type { Expense, ExpensePayer, ExpenseSplit, Member } from '@/types'
 import MemberAvatar from '@/components/ui/MemberAvatar'
 
 interface Props {
-  expense: Expense & { splits: ExpenseSplit[] }
+  expense: Expense & { splits: ExpenseSplit[]; payers?: ExpensePayer[] }
   members: Member[]
   currency: string
   isAdmin?: boolean
@@ -14,6 +14,9 @@ interface Props {
 
 export default function ExpenseCard({ expense, members, currency, isAdmin, onDelete, payerBalance }: Props) {
   const payer = members.find(m => m.id === expense.paid_by)
+  const payerNames = expense.payers && expense.payers.length > 1
+    ? expense.payers.map(p => members.find(m => m.id === p.member_id)?.name).filter(Boolean).join(' & ')
+    : payer?.name
   const enteredBy = members.find(m => m.id === expense.entered_by)
   const splitPairs = expense.splits
     .map(s => ({ member: members.find(m => m.id === s.member_id), amount: s.amount }))
@@ -37,14 +40,14 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
               <>
                 <p className="font-semibold text-sm">Settlement</p>
                 <p className="text-xs text-ink-muted">
-                  {payer?.name} paid {splitPairs[0]?.member.name} and now at
+                  {payerNames} paid {splitPairs[0]?.member.name} and now at
                 </p>
               </>
             ) : (
               <>
                 <p className="font-semibold text-sm truncate">{expense.description}</p>
                 <p className="text-xs text-ink-muted">
-                  {payer?.name} paid and now at
+                  {payerNames} paid and now at
                   {onBehalf && enteredBy && (
                     <><br /><span className="italic">(entered by {enteredBy.name})</span></>
                   )}

@@ -4,7 +4,8 @@ import { createServiceClient } from '@/lib/supabase/server'
 export const dynamic = 'force-dynamic'
 
 interface MemberRow { id: string; name: string; is_admin: boolean; group_id: string }
-interface ExpenseRow { id: string; paid_by: string; amount: number; expense_splits: SplitRow[] }
+interface ExpenseRow { id: string; expense_payers: PayerRow[]; expense_splits: SplitRow[] }
+interface PayerRow { member_id: string; amount: number }
 interface SplitRow { member_id: string; amount: number }
 
 export async function GET(request: Request) {
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
 
   const [membersRes, expensesRes] = await Promise.all([
     supabase.from('members').select('id, name, is_admin, group_id').eq('group_id', groupId),
-    supabase.from('expenses').select('id, paid_by, amount, expense_splits(member_id, amount)').eq('group_id', groupId),
+    supabase.from('expenses').select('id, expense_payers(member_id, amount), expense_splits(member_id, amount)').eq('group_id', groupId),
   ])
 
   if (membersRes.error || expensesRes.error) {
@@ -37,7 +38,9 @@ export async function GET(request: Request) {
   const owedByMember: Record<string, number> = {}
 
   for (const e of expenses) {
-    paidByMember[e.paid_by] = (paidByMember[e.paid_by] || 0) + Number(e.amount)
+    for (const p of e.expense_payers) {
+      paidByMember[p.member_id] = (paidByMember[p.member_id] || 0) + Number(p.amount)
+    }
     for (const s of e.expense_splits) {
       owedByMember[s.member_id] = (owedByMember[s.member_id] || 0) + Number(s.amount)
     }

@@ -31,6 +31,15 @@ create table expenses (
   created_at  timestamptz not null default now()
 );
 
+-- Expense payers (multi-payer support)
+create table expense_payers (
+  id          uuid primary key default uuid_generate_v4(),
+  expense_id  uuid not null references expenses(id) on delete cascade,
+  member_id   uuid not null references members(id) on delete cascade,
+  amount      numeric(10,2) not null check (amount > 0),
+  unique (expense_id, member_id)
+);
+
 -- Expense splits
 create table expense_splits (
   id          uuid primary key default uuid_generate_v4(),
@@ -80,6 +89,9 @@ create policy "service write" on groups for all using (true) with check (true);
 create policy "service write" on members for all using (true) with check (true);
 create policy "service write" on expenses for all using (true) with check (true);
 create policy "service write" on expense_splits for all using (true) with check (true);
+alter table expense_payers enable row level security;
+create policy "public read" on expense_payers for select using (true);
+create policy "service write" on expense_payers for all using (true) with check (true);
 alter table pending_verifications enable row level security;
 create policy "public read" on pending_verifications for select using (true);
 create policy "service write" on pending_verifications for all using (true) with check (true);
