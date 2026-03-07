@@ -36,7 +36,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const [error, setError] = useState('')
 
   function fmt(n: number) {
-    return String(parseFloat(n.toFixed(2)))
+    return n.toFixed(2).replace(/\.?0+$/, '')
   }
 
   function selectAll(e: React.FocusEvent<HTMLInputElement>) {
@@ -140,8 +140,8 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           />
         </div>
 
-        {/* Bill + Tip on one row */}
-        <div className="flex gap-3 items-end">
+        {/* Bill | Tip | Total+Roundup */}
+        <div className="flex gap-2 items-end">
           <div className="w-1/4">
             <label className="text-xs font-medium text-ink-soft block mb-2">Bill</label>
             <div className="relative">
@@ -158,10 +158,10 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
               />
             </div>
           </div>
-          <div className="flex-1">
+          <div className="w-1/4">
             <label className="text-xs font-medium text-ink-soft block mb-2">Tip</label>
             <select
-              className="input"
+              className="input px-2"
               value={tipPct}
               onChange={e => handleTipChange(Number(e.target.value))}
             >
@@ -170,42 +170,28 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
               ))}
             </select>
           </div>
+          <div className="flex-1">
+            <label className="text-xs font-medium text-ink-soft block mb-2">Total</label>
+            <label className="input flex items-center gap-2 cursor-pointer select-none py-3">
+              <input
+                type="checkbox"
+                checked={roundUp}
+                onChange={e => setRoundUp(e.target.checked)}
+                className="w-4 h-4 shrink-0"
+              />
+              <span className="text-sm font-semibold flex-1 text-right">
+                {finalTotal > 0 ? `${currency}${fmt(finalTotal)}` : ''}
+              </span>
+            </label>
+          </div>
         </div>
 
-        {/* Summary + round up */}
-        {subtotal > 0 && (
-          <div className="bg-surface rounded-lg px-4 py-3 text-sm space-y-1">
-            {tipPct > 0 && (
-              <>
-                <div className="flex justify-between text-ink-muted">
-                  <span>Subtotal</span>
-                  <span>{currency}{subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-ink-muted">
-                  <span>Tip ({tipPct}%)</span>
-                  <span>{currency}{tipAmount.toFixed(2)}</span>
-                </div>
-              </>
-            )}
-            <div className="flex justify-between items-center text-ink-muted">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={roundUp}
-                  onChange={e => setRoundUp(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                <span>Round up</span>
-              </label>
-              {roundUp && roundUpDelta > 0 && (
-                <span className="text-xs text-ink-muted">(+{currency}{roundUpDelta.toFixed(2)})</span>
-              )}
-            </div>
-            <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1">
-              <span>Total</span>
-              <span>{currency}{finalTotal.toFixed(2)}</span>
-            </div>
-          </div>
+        {/* Tip breakdown (compact, only when tip or roundup is active) */}
+        {subtotal > 0 && (tipPct > 0 || roundUpDelta > 0) && (
+          <p className="text-xs text-ink-muted -mt-2">
+            {tipPct > 0 && `Subtotal ${currency}${fmt(subtotal)} · Tip ${tipPct}% ${currency}${fmt(tipAmount)}`}
+            {roundUpDelta > 0 && `${tipPct > 0 ? ' · ' : ''}Rounded up +${currency}${fmt(roundUpDelta)}`}
+          </p>
         )}
 
         {/* Member table: Ordered | Owes | Paid */}
