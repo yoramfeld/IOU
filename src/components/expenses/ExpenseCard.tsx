@@ -41,8 +41,8 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
                   const m = members.find(x => x.id === p.member_id)
                   const bal = payerBalances?.[p.member_id]
                   return (
-                    <p key={p.member_id} className="text-xs text-ink-muted flex items-center gap-1">
-                      <span>{m?.name} paid {splitPairs[0]?.member.name} and now at</span>
+                    <p key={p.member_id} className="text-xs text-ink-muted">
+                      <span>{m?.name} paid {splitPairs[0]?.member.name} and now at </span>
                       {bal !== undefined && (
                         <span className={`font-medium ${bal >= 0 ? 'text-green' : 'text-red'}`}>
                           {`${bal >= 0 ? '+' : ''}${currency}${bal.toFixed(2)}`}
@@ -59,12 +59,12 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
                   const m = members.find(x => x.id === p.member_id)
                   const bal = payerBalances?.[p.member_id]
                   return (
-                    <p key={p.member_id} className="text-xs text-ink-muted flex items-center gap-1">
+                    <p key={p.member_id} className="text-xs text-ink-muted">
                       {isMultiPayer ? (
                         <span>{m?.name} paid {currency}{Number(p.amount).toFixed(2)}</span>
                       ) : (
                         <>
-                          <span>{m?.name} paid and now at</span>
+                          <span>{m?.name} paid and now at </span>
                           {bal !== undefined && (
                             <span className={`font-medium ${bal >= 0 ? 'text-green' : 'text-red'}`}>
                               {`${bal >= 0 ? '+' : ''}${currency}${bal.toFixed(2)}`}
