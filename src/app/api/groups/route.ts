@@ -1,6 +1,22 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const groupId = searchParams.get('groupId')
+  if (!groupId) return NextResponse.json({ error: 'Missing groupId' }, { status: 400 })
+
+  const supabase = createServiceClient()
+  const { data, error } = await supabase
+    .from('groups')
+    .select('rounding_balances')
+    .eq('id', groupId)
+    .single()
+
+  if (error) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  return NextResponse.json({ rounding_balances: data.rounding_balances ?? {} })
+}
+
 export async function PATCH(request: Request) {
   const { groupId, adminId, name, currency } = await request.json()
 

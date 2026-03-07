@@ -17,6 +17,7 @@ export default function ExpensesPage() {
   const { adminMode, setAdminMode, loaded: adminLoaded } = useAdminMode()
   const [expenses, setExpenses] = useState<(Expense & { splits: ExpenseSplit[]; payers: ExpensePayer[] })[]>([])
   const [members, setMembers] = useState<Member[]>([])
+  const [roundingBalances, setRoundingBalances] = useState<Record<string, number>>({})
   const [showModal, setShowModal] = useState(false)
   const [showQRModal, setShowQRModal] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
@@ -25,12 +26,17 @@ export default function ExpensesPage() {
     if (!session) return
     try {
       const t = Date.now()
-      const [expRes, memRes] = await Promise.all([
+      const [expRes, memRes, grpRes] = await Promise.all([
         fetch(`/api/expenses?groupId=${session.groupId}&_t=${t}`),
         fetch(`/api/members?groupId=${session.groupId}&_t=${t}`),
+        fetch(`/api/groups?groupId=${session.groupId}&_t=${t}`),
       ])
       if (expRes.ok) setExpenses(await expRes.json())
       if (memRes.ok) setMembers(await memRes.json())
+      if (grpRes.ok) {
+        const grp = await grpRes.json()
+        setRoundingBalances(grp.rounding_balances ?? {})
+      }
     } finally {
       setLoadingData(false)
     }
@@ -44,7 +50,7 @@ export default function ExpensesPage() {
     if (session) fetchData()
   }, [session, loading, router, fetchData])
 
-  async function handleAddExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[] }) {
+  async function handleAddExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[]; deviationDelta: Record<string, number> }) {
     if (!session) return
     const res = await fetch('/api/expenses', {
       method: 'POST',
@@ -58,6 +64,7 @@ export default function ExpensesPage() {
         customSplits: data.customSplits,
         payers: data.payers,
         enteredBy: session.memberId,
+        deviationDelta: data.deviationDelta,
       }),
     })
     if (!res.ok) throw new Error('Failed')
@@ -176,6 +183,7 @@ export default function ExpensesPage() {
           currentMemberId={session.memberId}
           isAdmin={session.isAdmin && adminMode}
           currency={session.currency}
+          roundingBalances={roundingBalances}
           onSubmit={handleAddExpense}
           onClose={() => setShowModal(false)}
         />

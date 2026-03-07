@@ -8,6 +8,7 @@ interface Props {
   currentMemberId: string
   isAdmin: boolean
   currency: string
+  roundingBalances?: Record<string, number>
   onSubmit: (data: {
     paidBy: string
     amount: number
@@ -15,6 +16,7 @@ interface Props {
     splitAmong: string[]
     customSplits?: { memberId: string; amount: number }[]
     payers: { memberId: string; amount: number }[]
+    deviationDelta: Record<string, number>
   }) => Promise<void>
   onClose: () => void
 }
@@ -25,7 +27,7 @@ function readSavedTip(): number {
   try { return parseInt(localStorage.getItem('iou_tip_pct') || '0', 10) || 0 } catch { return 0 }
 }
 
-export default function AddExpenseModal({ members, currentMemberId, isAdmin, currency, onSubmit, onClose }: Props) {
+export default function AddExpenseModal({ members, currentMemberId, isAdmin, currency, roundingBalances, onSubmit, onClose }: Props) {
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [tipPct, setTipPct] = useState(readSavedTip)
@@ -36,6 +38,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const [calcOpen, setCalcOpen] = useState<string | null>(null)
   const [calcExpr, setCalcExpr] = useState('')
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const devDeltaRef = useRef<Record<string, number>>({})
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -62,22 +65,57 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     return expr.split('+').reduce((s, v) => s + (parseFloat(v.trim()) || 0), 0)
   }
 
-  // Tip inc. = ceil or round of ordered*(1+pct/100) per member
-  function computeTipInc(ordered: Record<string, string>, pct: number, ru: boolean): Record<string, string> {
-    const result: Record<string, string> = {}
-    for (const [id, v] of Object.entries(ordered)) {
-      const o = parseFloat(v) || 0
-      const raw = o > 0 ? o * (1 + pct / 100) : 0
-      const ti = raw > 0 ? (ru ? Math.ceil(raw) : Math.round(raw)) : 0
-      result[id] = ti > 0 ? String(ti) : ''
+  // Tip inc. — floor+largest-remainder with error-diffusion bias from cumulative deviation
+  function computeTipInc(
+    ordered: Record<string, string>,
+    pct: number,
+    ru: boolean,
+    cumDev: Record<string, number> = {}
+  ): Record<string, string> {
+    const ids = Object.keys(ordered)
+    const amounts = ids.map(id => parseFloat(ordered[id]) || 0)
+    const totalOrdered = amounts.reduce((s, v) => s + v, 0)
+    const tipInc: Record<string, string> = {}
+    for (const id of ids) tipInc[id] = ''
+    devDeltaRef.current = {}
+    if (totalOrdered <= 0) return tipInc
+
+    // Grand total without floating-point error
+    const rawGrand = Math.round(totalOrdered * (1 + pct / 100) * 100) / 100
+    const grandTotal = ru ? Math.ceil(rawGrand) : Math.round(rawGrand)
+    if (grandTotal <= 0) return tipInc
+
+    // Only distribute among members who ordered > 0
+    const activeIdx = ids.map((_, i) => i).filter(i => amounts[i] > 0)
+    const activeAmounts = activeIdx.map(i => amounts[i])
+    const activeTotal = activeAmounts.reduce((s, v) => s + v, 0)
+
+    const exactShares = activeAmounts.map(a => a / activeTotal * grandTotal)
+    const floored = exactShares.map(Math.floor)
+    const remainder = grandTotal - floored.reduce((s, v) => s + v, 0)
+
+    // Priority = fractional part − cumulative over-charge (members who've been over-charged get lower priority)
+    const fracs = exactShares.map((v, i) => ({
+      i,
+      priority: (v - Math.floor(v)) - (cumDev[ids[activeIdx[i]]] ?? 0),
+    }))
+    fracs.sort((a, b) => b.priority - a.priority)
+    for (let j = 0; j < remainder; j++) floored[fracs[j].i]++
+
+    const newDelta: Record<string, number> = {}
+    for (let k = 0; k < activeIdx.length; k++) {
+      const id = ids[activeIdx[k]]
+      tipInc[id] = floored[k] > 0 ? String(floored[k]) : ''
+      newDelta[id] = Math.round((floored[k] - exactShares[k]) * 1000) / 1000
     }
-    return result
+    devDeltaRef.current = newDelta
+    return tipInc
   }
 
   function handleTipChange(pct: number) {
     setTipPct(pct)
     try { localStorage.setItem('iou_tip_pct', String(pct)) } catch {}
-    setTipIncAmounts(computeTipInc(customAmounts, pct, roundUp))
+    setTipIncAmounts(computeTipInc(customAmounts, pct, roundUp, roundingBalances))
   }
 
   // Cascade ceiled distribution; also recomputes tipIncAmounts
@@ -102,7 +140,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
       }
     }
     setCustomAmounts(newOrdered)
-    setTipIncAmounts(computeTipInc(newOrdered, tipPct, roundUp))
+    setTipIncAmounts(computeTipInc(newOrdered, tipPct, roundUp, roundingBalances))
   }
 
   function handleBillChange(value: string) {
@@ -118,7 +156,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         remaining -= share
       }
       setCustomAmounts(newAmounts)
-      setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
+      setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp, roundingBalances))
     } else {
       setCustomAmounts({})
       setTipIncAmounts({})
@@ -169,6 +207,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         splitAmong: computedCustomSplits.map(s => s.memberId),
         customSplits: computedCustomSplits,
         payers,
+        deviationDelta: devDeltaRef.current,
       })
       onClose()
     } catch {
@@ -238,7 +277,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                 onClick={() => {
                   const ru = !roundUp
                   setRoundUp(ru)
-                  setTipIncAmounts(computeTipInc(customAmounts, tipPct, ru))
+                  setTipIncAmounts(computeTipInc(customAmounts, tipPct, ru, roundingBalances))
                 }}
                 title={roundUp ? 'Round up on' : 'Round up off'}
                 className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-colors ${
