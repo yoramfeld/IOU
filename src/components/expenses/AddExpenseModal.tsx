@@ -294,12 +294,11 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     const displayVal = raw > 0 ? String(rounded2) : (customAmounts[m.id] ?? '')
                     return (
                       <div className="relative w-20 shrink-0">
-                        {isApprox && (
-                          <span className="absolute -left-3 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted select-none">~</span>
-                        )}
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
+                        <span className="absolute left-1 top-1/2 -translate-y-1/2 text-ink-muted text-xs">
+                          {isApprox ? `~${currency}` : currency}
+                        </span>
                         <input
-                          className={`input no-spinner pl-5 py-1.5 text-sm w-full ${!billVal ? 'opacity-40 pointer-events-none' : ''}`}
+                          className={`input no-spinner py-1.5 text-sm w-full ${isApprox ? 'pl-7' : 'pl-5'} ${!billVal ? 'opacity-40 pointer-events-none' : ''}`}
                           type="number"
                           step="any"
                           min="0"
@@ -323,12 +322,9 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     const rounded2 = Math.round(raw * 100) / 100
                     const isApprox = raw > 0 && Math.abs(raw - rounded2) > 1e-9
                     return (
-                      <div className="w-10 shrink-0 text-center relative">
-                        {isApprox && (
-                          <span className="absolute -left-2 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted select-none">~</span>
-                        )}
+                      <div className="w-10 shrink-0 text-center">
                         <span className="text-[10px] text-ink-muted">
-                          {raw > 0 ? rounded2 : ''}
+                          {raw > 0 ? (isApprox ? `~${rounded2}` : String(rounded2)) : ''}
                         </span>
                       </div>
                     )
