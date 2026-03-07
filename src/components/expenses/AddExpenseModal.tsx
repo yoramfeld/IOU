@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import type { Member } from '@/types'
 
 interface Props {
@@ -32,6 +32,8 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const [roundUp, setRoundUp] = useState(true)
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({})
   const [paidAmounts, setPaidAmounts] = useState<Record<string, string>>({})
+  const [calcOpen, setCalcOpen] = useState<string | null>(null)
+  const [calcExpr, setCalcExpr] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -50,6 +52,10 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   }
 
   // When bill changes, recalculate equal Ordered shares; clear when empty
+  function parseSum(expr: string): number {
+    return expr.split('+').reduce((s, v) => s + (parseFloat(v.trim()) || 0), 0)
+  }
+
   function handleBillChange(value: string) {
     setAmount(value)
     const billVal = parseFloat(value) || 0
@@ -171,18 +177,22 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
             </select>
           </div>
           <div className="flex-1">
-            <label className="text-xs font-medium text-ink-soft block mb-2">Total</label>
-            <label className="input flex items-center gap-2 cursor-pointer select-none py-3">
-              <input
-                type="checkbox"
-                checked={roundUp}
-                onChange={e => setRoundUp(e.target.checked)}
-                className="w-4 h-4 shrink-0"
-              />
-              <span className="text-sm font-semibold flex-1 text-right">
-                {finalTotal > 0 ? `${currency}${fmt(finalTotal)}` : ''}
-              </span>
-            </label>
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="text-xs font-medium text-ink-soft">Total</span>
+              <button
+                type="button"
+                onClick={() => setRoundUp(r => !r)}
+                title={roundUp ? 'Round up on' : 'Round up off'}
+                className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                  roundUp ? 'bg-accent border-accent' : 'border-ink-muted bg-white'
+                }`}
+              >
+                {roundUp && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
+              </button>
+            </div>
+            <div className="input py-3 text-sm font-semibold text-right">
+              {finalTotal > 0 ? `${currency}${fmt(finalTotal)}` : ''}
+            </div>
           </div>
         </div>
 
@@ -198,6 +208,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         <div>
           <div className="flex items-center gap-1.5 mb-2">
             <span className="flex-1" />
+            <span className="w-5 shrink-0" />
             <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Ordered</span>
             <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Total</span>
             <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Paid</span>
@@ -208,63 +219,114 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
               const label = m.name + (m.id === currentMemberId ? ' (you)' : '')
               const share = parseFloat(customAmounts[m.id] || '0')
               const owes = share > 0 ? Math.round(share * (1 + tipPct / 100) * scaleFactor * 100) / 100 : 0
+              const isCalcOpen = calcOpen === m.id
+              const calcSum = parseSum(calcExpr)
               return (
-                <div key={m.id} className="flex items-center gap-1.5">
-                  <span className="text-sm flex-1 truncate min-w-0">{label}</span>
+                <Fragment key={m.id}>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm flex-1 truncate min-w-0">{label}</span>
 
-                  {/* Ordered */}
-                  <div className="relative w-16 shrink-0">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
-                    <input
-                      className="input pl-5 py-1.5 text-sm w-full"
-                      type="number"
-                      step="any"
-                      min="0"
-                      placeholder="0"
-                      value={customAmounts[m.id] ?? ''}
-                      onFocus={e => {
-                        const ref = parseFloat(amount) || 0
-                        const others = Object.entries(customAmounts)
-                          .filter(([id]) => id !== m.id)
-                          .reduce((s, [, v]) => s + (parseFloat(v) || 0), 0)
-                        const remaining = Math.max(0, Math.round((ref - others) * 100) / 100)
-                        if (remaining > 0) setCustomAmounts(prev => ({ ...prev, [m.id]: fmt(remaining) }))
-                        selectAll(e)
-                      }}
-                      onChange={e => setCustomAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
-                    />
+                    {/* Calc toggle */}
+                    <button
+                      type="button"
+                      title="Calculator"
+                      onClick={() => { setCalcOpen(isCalcOpen ? null : m.id); setCalcExpr('') }}
+                      className={`w-5 h-5 shrink-0 rounded text-sm flex items-center justify-center transition-colors ${
+                        isCalcOpen ? 'text-accent' : 'text-ink-muted hover:text-ink-soft'
+                      }`}
+                    >
+                      ∑
+                    </button>
+
+                    {/* Ordered */}
+                    <div className="relative w-16 shrink-0">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
+                      <input
+                        className="input pl-5 py-1.5 text-sm w-full"
+                        type="number"
+                        step="any"
+                        min="0"
+                        placeholder="0"
+                        value={customAmounts[m.id] ?? ''}
+                        onFocus={e => {
+                          const ref = parseFloat(amount) || 0
+                          const others = Object.entries(customAmounts)
+                            .filter(([id]) => id !== m.id)
+                            .reduce((s, [, v]) => s + (parseFloat(v) || 0), 0)
+                          const remaining = Math.max(0, Math.round((ref - others) * 100) / 100)
+                          if (remaining > 0) setCustomAmounts(prev => ({ ...prev, [m.id]: fmt(remaining) }))
+                          selectAll(e)
+                        }}
+                        onChange={e => setCustomAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
+                      />
+                    </div>
+
+                    {/* Total (read-only) */}
+                    <div className="relative w-16 shrink-0">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
+                      <input
+                        className="input pl-5 py-1.5 text-sm w-full bg-surface text-ink-muted"
+                        type="text"
+                        readOnly
+                        value={owes > 0 ? fmt(owes) : ''}
+                        placeholder="0"
+                      />
+                    </div>
+
+                    {/* Paid */}
+                    <div className="relative w-16 shrink-0">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
+                      <input
+                        className="input pl-5 py-1.5 text-sm w-full"
+                        type="number"
+                        step="any"
+                        min="0"
+                        placeholder="0"
+                        value={paidAmounts[m.id] ?? ''}
+                        onFocus={e => {
+                          if (unassigned > 0) setPaidAmounts(prev => ({ ...prev, [m.id]: fmt(unassigned) }))
+                          selectAll(e)
+                        }}
+                        onChange={e => setPaidAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
+                      />
+                    </div>
                   </div>
 
-                  {/* Owes (read-only) */}
-                  <div className="relative w-16 shrink-0">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
-                    <input
-                      className="input pl-5 py-1.5 text-sm w-full bg-surface text-ink-muted"
-                      type="text"
-                      readOnly
-                      value={owes > 0 ? fmt(owes) : ''}
-                      placeholder="0"
-                    />
-                  </div>
-
-                  {/* Paid */}
-                  <div className="relative w-16 shrink-0">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
-                    <input
-                      className="input pl-5 py-1.5 text-sm w-full"
-                      type="number"
-                      step="any"
-                      min="0"
-                      placeholder="0"
-                      value={paidAmounts[m.id] ?? ''}
-                      onFocus={e => {
-                        if (unassigned > 0) setPaidAmounts(prev => ({ ...prev, [m.id]: fmt(unassigned) }))
-                        selectAll(e)
-                      }}
-                      onChange={e => setPaidAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
-                    />
-                  </div>
-                </div>
+                  {/* Inline calculator row */}
+                  {isCalcOpen && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="flex-1 min-w-0" />
+                      <span className="w-5 shrink-0" />
+                      <input
+                        className="input py-1 text-sm w-16 shrink-0 text-center"
+                        type="text"
+                        placeholder="a+b+c"
+                        value={calcExpr}
+                        autoFocus
+                        onChange={e => setCalcExpr(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && calcSum > 0) {
+                            setCustomAmounts(prev => ({ ...prev, [m.id]: fmt(calcSum) }))
+                            setCalcOpen(null); setCalcExpr('')
+                          }
+                          if (e.key === 'Escape') { setCalcOpen(null); setCalcExpr('') }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={calcSum <= 0}
+                        className="w-16 shrink-0 text-xs text-center text-accent font-semibold py-1 disabled:opacity-40"
+                        onClick={() => {
+                          if (calcSum > 0) setCustomAmounts(prev => ({ ...prev, [m.id]: fmt(calcSum) }))
+                          setCalcOpen(null); setCalcExpr('')
+                        }}
+                      >
+                        {calcSum > 0 ? `= ${fmt(calcSum)}` : '='}
+                      </button>
+                      <span className="w-16 shrink-0" />
+                    </div>
+                  )}
+                </Fragment>
               )
             })}
           </div>
