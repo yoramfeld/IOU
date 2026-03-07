@@ -182,7 +182,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const subtotal = Object.values(customAmounts).reduce((s, v) => s + (parseFloat(v) || 0), 0)
   // Base the grand total on the bill (stable), not the running ordered sum
   const finalTotal = billVal > 0
-    ? (roundUp ? Math.ceil(billVal * (1 + tipPct / 100)) : Math.round(billVal * (1 + tipPct / 100)))
+    ? (() => { const cents = Math.round(billVal * (1 + tipPct / 100) * 100) / 100; return roundUp ? Math.ceil(cents) : Math.round(cents) })()
     : Object.values(tipIncAmounts).reduce((s, v) => s + (parseFloat(v) || 0), 0)
   const tipAmount = finalTotal - subtotal
 
