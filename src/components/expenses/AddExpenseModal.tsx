@@ -36,7 +36,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const [error, setError] = useState('')
 
   function fmt(n: number) {
-    return Number.isInteger(n) ? String(n) : n.toFixed(2)
+    return String(parseFloat(n.toFixed(2)))
   }
 
   function selectAll(e: React.FocusEvent<HTMLInputElement>) {
@@ -215,7 +215,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           <div className="flex items-center gap-1.5 mb-2">
             <span className="flex-1" />
             <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Ordered</span>
-            <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Owes</span>
+            <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Total</span>
             <span className="w-16 shrink-0 text-xs font-medium text-ink-soft text-center">Paid</span>
           </div>
 
@@ -304,9 +304,13 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         <button
           onClick={handleSubmit}
           disabled={submitting}
-          className="btn btn-primary"
+          className={`btn ${
+            description.trim() && computedCustomSplits.length > 0 && payers.length > 0 && Math.abs(unassigned) < 0.01
+              ? 'btn-success'
+              : 'btn-primary'
+          }`}
         >
-          {submitting ? 'Adding...' : 'Add expense'}
+          {submitting ? 'Submitting...' : 'Submit'}
         </button>
       </div>
     </div>
