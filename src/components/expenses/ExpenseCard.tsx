@@ -115,7 +115,7 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
             {isUnequal ? (
               groupedSplits.map(({ amount, names }) => (
                 <span key={amount} className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full">
-                  {names.join(', ')}: {currency}{amount}
+                  {names.join(', ')}: {currency}{amount % 1 === 0 ? amount : amount.toFixed(2)}
                 </span>
               ))
             ) : (
