@@ -324,7 +324,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           <div className="flex items-center gap-1.5 mb-2">
             <span className="flex-1" />
             <span className="w-20 shrink-0 text-xs font-medium text-ink-soft text-center">Ordered</span>
-            <span className="w-10 shrink-0 text-xs font-medium text-ink-soft text-center">To pay</span>
+            <span className="w-14 shrink-0 text-xs font-medium text-ink-soft text-center">To pay</span>
             <span className="w-20 shrink-0 text-xs font-medium text-ink-soft text-center">Paid</span>
           </div>
 
@@ -380,7 +380,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     const rounded2 = Math.round(raw * 100) / 100
                     const isApprox = raw > 0 && Math.abs(raw - rounded2) > 1e-9
                     return (
-                      <div className="w-10 shrink-0 text-center">
+                      <div className="w-14 shrink-0 text-center">
                         <span className="text-[10px] text-ink-muted">
                           {raw > 0 ? (isApprox ? `${currency}${rounded2}…` : `${currency}${rounded2}`) : ''}
                         </span>
@@ -420,7 +420,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
               <span className="w-20 shrink-0 text-xs text-center text-ink-muted">
                 {orderedUnassigned !== 0 ? (orderedUnassigned > 0 ? `${currency}${orderedUnassigned} missing` : `${currency}${-orderedUnassigned} over`) : ''}
               </span>
-              <span className="w-10 shrink-0" />
+              <span className="w-14 shrink-0" />
               <span className="w-20 shrink-0 text-xs text-center text-ink-muted">
                 {unassigned !== 0 && finalTotal > 0 ? (unassigned > 0 ? `${currency}${unassigned} missing` : `${currency}${-unassigned} over`) : ''}
               </span>
