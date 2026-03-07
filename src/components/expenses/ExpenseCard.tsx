@@ -9,15 +9,13 @@ interface Props {
   currency: string
   isAdmin?: boolean
   onDelete?: (id: string) => void
-  payerBalance?: number
+  payerBalances?: Record<string, number>
 }
 
-export default function ExpenseCard({ expense, members, currency, isAdmin, onDelete, payerBalance }: Props) {
+export default function ExpenseCard({ expense, members, currency, isAdmin, onDelete, payerBalances }: Props) {
   const payer = members.find(m => m.id === expense.paid_by)
-  const payerNames = expense.payers && expense.payers.length > 1
-    ? expense.payers.map(p => members.find(m => m.id === p.member_id)?.name).filter(Boolean).join(' & ')
-    : payer?.name
   const enteredBy = members.find(m => m.id === expense.entered_by)
+  const isMultiPayer = (expense.payers?.length ?? 0) > 1
   const splitPairs = expense.splits
     .map(s => ({ member: members.find(m => m.id === s.member_id), amount: s.amount }))
     .filter(p => p.member != null) as { member: Member; amount: number | string }[]
@@ -35,34 +33,53 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           {payer && <MemberAvatar name={payer.name} />}
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             {isSettlement ? (
               <>
                 <p className="font-semibold text-sm">Settlement</p>
-                <p className="text-xs text-ink-muted">
-                  {payerNames} paid {splitPairs[0]?.member.name} and now at
-                </p>
+                {(expense.payers ?? [{ member_id: expense.paid_by, amount: expense.amount }]).map(p => {
+                  const m = members.find(x => x.id === p.member_id)
+                  const bal = payerBalances?.[p.member_id]
+                  return (
+                    <p key={p.member_id} className="text-xs text-ink-muted flex items-center gap-1">
+                      <span>{m?.name} paid {splitPairs[0]?.member.name} and now at</span>
+                      {bal !== undefined && (
+                        <span className={`font-medium ${bal >= 0 ? 'text-green' : 'text-red'}`}>
+                          {bal >= 0 ? '+' : ''}{currency}{bal.toFixed(2)}
+                        </span>
+                      )}
+                    </p>
+                  )
+                })}
               </>
             ) : (
               <>
                 <p className="font-semibold text-sm truncate">{expense.description}</p>
-                <p className="text-xs text-ink-muted">
-                  {payerNames} paid and now at
-                  {onBehalf && enteredBy && (
-                    <><br /><span className="italic">(entered by {enteredBy.name})</span></>
-                  )}
-                </p>
+                {(expense.payers ?? [{ member_id: expense.paid_by, amount: expense.amount }]).map(p => {
+                  const m = members.find(x => x.id === p.member_id)
+                  const bal = payerBalances?.[p.member_id]
+                  return (
+                    <p key={p.member_id} className="text-xs text-ink-muted flex items-center gap-1">
+                      <span>
+                        {m?.name}{isMultiPayer ? ` paid ${currency}${Number(p.amount).toFixed(2)} and now at` : ' paid and now at'}
+                      </span>
+                      {bal !== undefined && (
+                        <span className={`font-medium ${bal >= 0 ? 'text-green' : 'text-red'}`}>
+                          {bal >= 0 ? '+' : ''}{currency}{bal.toFixed(2)}
+                        </span>
+                      )}
+                    </p>
+                  )
+                })}
+                {onBehalf && enteredBy && (
+                  <p className="text-xs text-ink-muted italic">(entered by {enteredBy.name})</p>
+                )}
               </>
             )}
           </div>
         </div>
         <div className="text-right shrink-0">
           <p className="font-bold text-sm">{currency}{Number(expense.amount).toFixed(2)}</p>
-          {payerBalance !== undefined && (
-            <p className={`text-xs font-medium ${payerBalance >= 0 ? 'text-green' : 'text-red'}`}>
-              {payerBalance >= 0 ? '+' : ''}{currency}{payerBalance.toFixed(2)}
-            </p>
-          )}
           {isAdmin && onDelete && (
             <button
               onClick={() => onDelete(expense.id)}

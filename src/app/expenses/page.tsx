@@ -74,9 +74,9 @@ export default function ExpensesPage() {
     await fetchData()
   }
 
-  // Compute payer's running balance per expense (oldest → newest)
+  // Compute each payer's running balance per expense (oldest → newest)
   const payerBalances = useMemo(() => {
-    const map: Record<string, number> = {}
+    const map: Record<string, Record<string, number>> = {}
     const balances: Record<string, number> = {} // memberId → running balance
 
     // Expenses are newest-first, iterate in reverse for oldest-first
@@ -90,9 +90,12 @@ export default function ExpensesPage() {
       for (const s of exp.splits) {
         balances[s.member_id] = (balances[s.member_id] || 0) + Number(s.amount) // amount is negative
       }
-      // Show running balance of primary payer (first payer or paid_by)
-      const primaryPayerId = exp.payers?.[0]?.member_id ?? exp.paid_by
-      map[exp.id] = Math.round((balances[primaryPayerId] || 0) * 100) / 100
+      // Store running balance for every payer on this expense
+      const payerIds = exp.payers?.length ? exp.payers.map(p => p.member_id) : [exp.paid_by]
+      map[exp.id] = {}
+      for (const id of payerIds) {
+        map[exp.id][id] = Math.round((balances[id] || 0) * 100) / 100
+      }
     }
     return map
   }, [expenses])

@@ -1,15 +1,15 @@
 'use client'
 
-import type { Expense, ExpenseSplit, Member } from '@/types'
+import type { Expense, ExpensePayer, ExpenseSplit, Member } from '@/types'
 import ExpenseCard from './ExpenseCard'
 
 interface Props {
-  expenses: (Expense & { splits: ExpenseSplit[] })[]
+  expenses: (Expense & { splits: ExpenseSplit[]; payers: ExpensePayer[] })[]
   members: Member[]
   currency: string
   isAdmin?: boolean
   onDelete?: (id: string) => void
-  payerBalances?: Record<string, number>
+  payerBalances?: Record<string, Record<string, number>>
 }
 
 export default function ExpenseList({ expenses, members, currency, isAdmin, onDelete, payerBalances }: Props) {
@@ -33,7 +33,7 @@ export default function ExpenseList({ expenses, members, currency, isAdmin, onDe
           currency={currency}
           isAdmin={isAdmin}
           onDelete={onDelete}
-          payerBalance={payerBalances?.[expense.id]}
+          payerBalances={payerBalances?.[expense.id]}
         />
       ))}
     </div>
