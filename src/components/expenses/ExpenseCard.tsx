@@ -15,9 +15,12 @@ interface Props {
 export default function ExpenseCard({ expense, members, currency, isAdmin, onDelete, payerBalance }: Props) {
   const payer = members.find(m => m.id === expense.paid_by)
   const enteredBy = members.find(m => m.id === expense.entered_by)
-  const splitMembers = expense.splits
-    .map(s => members.find(m => m.id === s.member_id))
-    .filter(Boolean) as Member[]
+  const splitPairs = expense.splits
+    .map(s => ({ member: members.find(m => m.id === s.member_id), amount: s.amount }))
+    .filter(p => p.member != null) as { member: Member; amount: number | string }[]
+
+  const isUnequal = splitPairs.length > 1 &&
+    splitPairs.some(p => Number(p.amount) !== Number(splitPairs[0].amount))
 
   const onBehalf = expense.entered_by !== expense.paid_by
   const isSettlement = expense.description.startsWith('⚡ Settlement:')
@@ -34,7 +37,7 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
               <>
                 <p className="font-semibold text-sm">Settlement</p>
                 <p className="text-xs text-ink-muted">
-                  {payer?.name} paid {splitMembers[0]?.name} and now at
+                  {payer?.name} paid {splitPairs[0]?.member.name} and now at
                 </p>
               </>
             ) : (
@@ -71,9 +74,9 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
         <p className="text-xs text-ink-muted">{dateStr}</p>
         {!isSettlement && (
           <div className="flex gap-1 flex-wrap justify-end">
-            {splitMembers.map(m => (
+            {splitPairs.map(({ member: m, amount: a }) => (
               <span key={m.id} className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full">
-                {m.name}
+                {m.name}{isUnequal ? ` ${currency}${Math.abs(Number(a)).toFixed(2)}` : ''}
               </span>
             ))}
           </div>

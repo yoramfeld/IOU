@@ -27,9 +27,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { groupId, paidBy, amount, description, splitAmong, enteredBy } = await request.json()
+  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy } = await request.json()
 
-  if (!groupId || !paidBy || !amount || !description?.trim() || !splitAmong?.length || !enteredBy) {
+  const hasCustom = Array.isArray(customSplits) && customSplits.length > 0
+  if (!groupId || !paidBy || !amount || !description?.trim() || !enteredBy) {
+    return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  }
+  if (!hasCustom && !splitAmong?.length) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   }
 
@@ -70,12 +74,17 @@ export async function POST(request: Request) {
   }
 
   // Create splits
-  const splitAmount = -(Number(amount) / splitAmong.length)
-  const splits = splitAmong.map((memberId: string) => ({
-    expense_id: expense.id,
-    member_id: memberId,
-    amount: Math.round(splitAmount * 100) / 100,
-  }))
+  const splits = hasCustom
+    ? customSplits.map(({ memberId, amount: a }: { memberId: string; amount: number }) => ({
+        expense_id: expense.id,
+        member_id: memberId,
+        amount: -Math.round(a * 100) / 100,
+      }))
+    : splitAmong.map((memberId: string) => ({
+        expense_id: expense.id,
+        member_id: memberId,
+        amount: Math.round(-(Number(amount) / splitAmong.length) * 100) / 100,
+      }))
 
   const { error: splitErr } = await supabase
     .from('expense_splits')

@@ -44,7 +44,7 @@ export default function ExpensesPage() {
     if (session) fetchData()
   }, [session, loading, router, fetchData])
 
-  async function handleAddExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[] }) {
+  async function handleAddExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[] }) {
     if (!session) return
     const res = await fetch('/api/expenses', {
       method: 'POST',
@@ -55,6 +55,7 @@ export default function ExpensesPage() {
         amount: data.amount,
         description: data.description,
         splitAmong: data.splitAmong,
+        customSplits: data.customSplits,
         enteredBy: session.memberId,
       }),
     })
