@@ -199,15 +199,15 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     if (computedCustomSplits.length === 0) { setError('Enter at least one ordered amount'); return }
     if (billVal > 0 && orderedUnassigned !== 0) {
       setError(orderedUnassigned > 0
-        ? `${currency}${orderedUnassigned} of bill unassigned`
-        : `Ordered exceeds bill by ${currency}${-orderedUnassigned}`)
+        ? `${currency}${orderedUnassigned} missing`
+        : `${currency}${-orderedUnassigned} over`)
       return
     }
     if (payers.length === 0) { setError('Enter who paid'); return }
     if (unassigned !== 0) {
       setError(unassigned > 0
-        ? `${currency}${unassigned} still unassigned`
-        : `Paid exceeds total by ${currency}${-unassigned}`)
+        ? `${currency}${unassigned} missing`
+        : `${currency}${-unassigned} over`)
       return
     }
     setSubmitting(true)
@@ -408,11 +408,11 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           {(orderedUnassigned !== 0 || unassigned !== 0) && (
             <div className="flex justify-end mt-1 gap-1.5">
               <span className="w-20 shrink-0 text-xs text-center text-ink-muted">
-                {orderedUnassigned !== 0 ? (orderedUnassigned > 0 ? `${orderedUnassigned} left` : `+${-orderedUnassigned} over`) : ''}
+                {orderedUnassigned !== 0 ? (orderedUnassigned > 0 ? `${orderedUnassigned} missing` : `${-orderedUnassigned} over`) : ''}
               </span>
               <span className="w-10 shrink-0" />
               <span className="w-20 shrink-0 text-xs text-center text-ink-muted">
-                {unassigned !== 0 && finalTotal > 0 ? (unassigned > 0 ? `${unassigned} left` : `+${-unassigned} over`) : ''}
+                {unassigned !== 0 && finalTotal > 0 ? (unassigned > 0 ? `${unassigned} missing` : `${-unassigned} over`) : ''}
               </span>
             </div>
           )}
