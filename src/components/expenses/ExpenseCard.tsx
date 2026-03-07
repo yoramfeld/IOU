@@ -45,7 +45,7 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
                       <span>{m?.name} paid {splitPairs[0]?.member.name} and now at</span>
                       {bal !== undefined && (
                         <span className={`font-medium ${bal >= 0 ? 'text-green' : 'text-red'}`}>
-                          {bal >= 0 ? '+' : ''}{currency}{bal.toFixed(2)}
+                          {`${bal >= 0 ? '+' : ''}${currency}${bal.toFixed(2)}`}
                         </span>
                       )}
                     </p>
@@ -67,7 +67,7 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
                           <span>{m?.name} paid and now at</span>
                           {bal !== undefined && (
                             <span className={`font-medium ${bal >= 0 ? 'text-green' : 'text-red'}`}>
-                              {bal >= 0 ? '+' : ''}{currency}{bal.toFixed(2)}
+                              {`${bal >= 0 ? '+' : ''}${currency}${bal.toFixed(2)}`}
                             </span>
                           )}
                         </>
