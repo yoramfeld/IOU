@@ -179,7 +179,10 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
 
   // --- Totals ---
   const subtotal = Object.values(customAmounts).reduce((s, v) => s + (parseFloat(v) || 0), 0)
-  const finalTotal = Object.values(tipIncAmounts).reduce((s, v) => s + (parseFloat(v) || 0), 0)
+  // Base the grand total on the bill (stable), not the running ordered sum
+  const finalTotal = billVal > 0
+    ? (roundUp ? Math.ceil(billVal * (1 + tipPct / 100)) : Math.round(billVal * (1 + tipPct / 100)))
+    : Object.values(tipIncAmounts).reduce((s, v) => s + (parseFloat(v) || 0), 0)
   const tipAmount = finalTotal - subtotal
 
   // --- Split (uses tipIncAmounts as the authoritative per-person totals) ---
@@ -290,7 +293,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-1.5 mb-2">
-              <span className="text-xs font-medium text-ink-soft">Tip inc.</span>
+              <span className="text-xs font-medium text-ink-soft">To pay</span>
               <button
                 type="button"
                 onClick={() => {
@@ -321,7 +324,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           <div className="flex items-center gap-1.5 mb-2">
             <span className="flex-1" />
             <span className="w-20 shrink-0 text-xs font-medium text-ink-soft text-center">Ordered</span>
-            <span className="w-10 shrink-0 text-xs font-medium text-ink-soft text-center">Tip</span>
+            <span className="w-10 shrink-0 text-xs font-medium text-ink-soft text-center">To pay</span>
             <span className="w-20 shrink-0 text-xs font-medium text-ink-soft text-center">Paid</span>
           </div>
 
