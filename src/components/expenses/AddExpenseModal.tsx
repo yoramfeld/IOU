@@ -295,7 +295,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                     return (
                       <div className="relative w-20 shrink-0">
                         {isApprox && (
-                          <span className="absolute -left-3 top-1/2 -translate-y-1/2 text-[9px] text-ink-muted select-none">~</span>
+                          <span className="absolute -left-3 top-1/2 -translate-y-1/2 text-[11px] text-ink-muted select-none">~</span>
                         )}
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
                         <input
