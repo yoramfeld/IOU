@@ -23,6 +23,20 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
   const isUnequal = splitPairs.length > 1 &&
     splitPairs.some(p => Number(p.amount) !== Number(splitPairs[0].amount))
 
+  // Group members by their rounded amount for display
+  const groupedSplits: { amount: number; names: string[] }[] = isUnequal
+    ? Object.entries(
+        splitPairs.reduce((acc, { member, amount }) => {
+          const key = Math.round(Number(amount) * 100) / 100
+          if (!acc[key]) acc[key] = []
+          acc[key].push(member.name)
+          return acc
+        }, {} as Record<number, string[]>)
+      )
+        .map(([amount, names]) => ({ amount: Number(amount), names }))
+        .sort((a, b) => b.amount - a.amount)
+    : []
+
   const onBehalf = expense.entered_by !== expense.paid_by
   const isSettlement = expense.description.startsWith('⚡ Settlement:')
   const dt = new Date(expense.created_at)
@@ -98,11 +112,19 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
         <p className="text-xs text-ink-muted whitespace-nowrap overflow-hidden">{dateStr}</p>
         {!isSettlement && (
           <div className="flex gap-1 flex-wrap justify-end">
-            {splitPairs.map(({ member: m, amount: a }) => (
-              <span key={m.id} className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full">
-                {m.name}{isUnequal ? ` ${currency}${Math.abs(Math.round(Number(a)))}` : ''}
-              </span>
-            ))}
+            {isUnequal ? (
+              groupedSplits.map(({ amount, names }) => (
+                <span key={amount} className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full">
+                  {names.join(', ')}: {currency}{amount}
+                </span>
+              ))
+            ) : (
+              splitPairs.map(({ member: m }) => (
+                <span key={m.id} className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full">
+                  {m.name}
+                </span>
+              ))
+            )}
           </div>
         )}
       </div>
