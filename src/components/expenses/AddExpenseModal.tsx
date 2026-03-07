@@ -101,13 +101,13 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     const newOrdered: Record<string, string> = { ...customAmounts, [pivotMemberId]: ceiled > 0 ? String(ceiled) : '' }
     if (bRef > 0) {
       const fixedSum = members.slice(0, pivotIdx).reduce((s, m) => s + (parseFloat(customAmounts[m.id]) || 0), 0)
-      let remaining = bRef - fixedSum - ceiled
+      const remaining = bRef - fixedSum - ceiled
       const following = members.slice(pivotIdx + 1)
-      for (let i = 0; i < following.length; i++) {
-        if (remaining <= 0) { newOrdered[following[i].id] = ''; continue }
-        const share = Math.ceil(remaining / (following.length - i))
-        newOrdered[following[i].id] = String(share)
-        remaining -= share
+      if (remaining > 0 && following.length > 0) {
+        const exactShare = Math.round(remaining / following.length * 10000) / 10000
+        for (const m of following) newOrdered[m.id] = String(exactShare)
+      } else {
+        for (const m of following) newOrdered[m.id] = ''
       }
     }
     setCustomAmounts(newOrdered)
@@ -118,14 +118,9 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     setAmount(value)
     const billRef = parseFloat(value) || 0
     if (billRef > 0) {
+      const exactShare = Math.round(billRef / members.length * 10000) / 10000
       const newAmounts: Record<string, string> = {}
-      let remaining = billRef
-      for (let i = 0; i < members.length; i++) {
-        if (remaining <= 0) { newAmounts[members[i].id] = ''; continue }
-        const share = Math.ceil(remaining / (members.length - i))
-        newAmounts[members[i].id] = String(share)
-        remaining -= share
-      }
+      for (const m of members) newAmounts[m.id] = String(exactShare)
       setCustomAmounts(newAmounts)
       setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
     } else {
