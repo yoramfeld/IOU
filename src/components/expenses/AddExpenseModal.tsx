@@ -43,8 +43,28 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const [calcOpen, setCalcOpen] = useState<string | null>(null)
   const [calcExpr, setCalcExpr] = useState('')
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [excluded, setExcluded] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  function toggleExclude(memberId: string) {
+    const next = new Set(excluded)
+    if (next.has(memberId)) next.delete(memberId); else next.add(memberId)
+    setExcluded(next)
+
+    const billRef = parseFloat(amount) || 0
+    if (billRef > 0) {
+      const active = sortedMembers.filter(m => !next.has(m.id))
+      const share = active.length > 0 ? Math.round(billRef / active.length * 10000) / 10000 : 0
+      const newAmounts: Record<string, string> = {}
+      for (const m of sortedMembers)
+        newAmounts[m.id] = next.has(m.id) ? '' : String(share)
+      setCustomAmounts(newAmounts)
+      setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
+    }
+    if (next.has(memberId))
+      setPaidAmounts(prev => ({ ...prev, [memberId]: '' }))
+  }
 
   function fmt(n: number) {
     return n.toFixed(2).replace(/\.?0+$/, '')
@@ -107,9 +127,11 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
 
     const newOrdered: Record<string, string> = { ...customAmounts, [pivotMemberId]: ceiled > 0 ? String(ceiled) : '' }
     if (bRef > 0) {
-      const fixedSum = sortedMembers.slice(0, pivotIdx).reduce((s, m) => s + (parseFloat(customAmounts[m.id]) || 0), 0)
+      const fixedSum = sortedMembers.slice(0, pivotIdx)
+        .filter(m => !excluded.has(m.id))
+        .reduce((s, m) => s + (parseFloat(customAmounts[m.id]) || 0), 0)
       const remaining = bRef - fixedSum - ceiled
-      const following = sortedMembers.slice(pivotIdx + 1)
+      const following = sortedMembers.slice(pivotIdx + 1).filter(m => !excluded.has(m.id))
       if (remaining > 0 && following.length > 0) {
         const exactShare = Math.round(remaining / following.length * 10000) / 10000
         for (const m of following) newOrdered[m.id] = String(exactShare)
@@ -125,9 +147,10 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     setAmount(value)
     const billRef = parseFloat(value) || 0
     if (billRef > 0) {
-      const exactShare = Math.round(billRef / sortedMembers.length * 10000) / 10000
+      const active = sortedMembers.filter(m => !excluded.has(m.id))
+      const share = active.length > 0 ? Math.round(billRef / active.length * 10000) / 10000 : 0
       const newAmounts: Record<string, string> = {}
-      for (const m of sortedMembers) newAmounts[m.id] = String(exactShare)
+      for (const m of sortedMembers) newAmounts[m.id] = excluded.has(m.id) ? '' : String(share)
       setCustomAmounts(newAmounts)
       setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
     } else {
@@ -283,8 +306,14 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
               const label = m.name + (m.id === currentMemberId ? ' (you)' : '')
               function openCalc() { setCalcOpen(m.id); setCalcExpr('') }
               return (
-                <div key={m.id} className="flex items-center gap-1.5">
-                  <span className="text-xs flex-1 truncate min-w-0">{label}</span>
+                <div key={m.id} className={`flex items-center gap-1.5 transition-opacity ${excluded.has(m.id) ? 'opacity-40' : ''}`}>
+                  <span
+                    onClick={() => toggleExclude(m.id)}
+                    className={`text-xs flex-1 truncate min-w-0 cursor-pointer select-none transition-opacity
+                      ${excluded.has(m.id) ? 'line-through' : 'active:opacity-60'}`}
+                  >
+                    {label}
+                  </span>
 
                   {/* Ordered — disabled until bill is set; no spinners; cascade; double-click/long-press opens calc */}
                   {(() => {
@@ -298,12 +327,12 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                           <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-ink-muted text-[11px] select-none">~</span>
                         )}
                         <input
-                          className={`input no-spinner py-1.5 text-sm w-full ${isApprox ? 'pl-5' : 'pl-3'} ${!billVal ? 'opacity-40 pointer-events-none' : ''}`}
+                          className={`input no-spinner py-1.5 text-sm w-full ${isApprox ? 'pl-5' : 'pl-3'} ${!billVal || excluded.has(m.id) ? 'opacity-40 pointer-events-none' : ''}`}
                           type="number"
                           step="any"
                           min="0"
                           placeholder="0"
-                          disabled={!billVal}
+                          disabled={!billVal || excluded.has(m.id)}
                           value={displayVal}
                           onFocus={selectAll}
                           onChange={e => handleOrderedChange(memberIdx, m.id, e.target.value)}
@@ -333,11 +362,12 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                   {/* Paid — ceil on blur; snap to ceil(unassigned) on focus */}
                   <div className="relative w-20 shrink-0">
                     <input
-                      className="input pl-3 py-1.5 text-sm w-full"
+                      className={`input pl-3 py-1.5 text-sm w-full ${excluded.has(m.id) ? 'opacity-40 pointer-events-none' : ''}`}
                       type="number"
                       step="1"
                       min="0"
                       placeholder="0"
+                      disabled={excluded.has(m.id)}
                       value={paidAmounts[m.id] ?? ''}
                       onFocus={e => {
                         if (unassigned > 0) setPaidAmounts(prev => ({ ...prev, [m.id]: String(Math.ceil(unassigned)) }))
