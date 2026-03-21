@@ -1,12 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { sql } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
-
-interface MemberRow { id: string; name: string; is_admin: boolean; group_id: string }
-interface ExpenseRow { id: string; expense_payers: PayerRow[]; expense_splits: SplitRow[] }
-interface PayerRow { member_id: string; amount: number }
-interface SplitRow { member_id: string; amount: number }
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -16,37 +11,27 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing groupId' }, { status: 400 })
   }
 
-  const supabase = createServiceClient()
-
-  const [membersRes, expensesRes] = await Promise.all([
-    supabase.from('members').select('id, name, is_admin, group_id').eq('group_id', groupId),
-    supabase.from('expenses').select('id, expense_payers(member_id, amount), expense_splits(member_id, amount)').eq('group_id', groupId),
+  const [members, payers, splits] = await Promise.all([
+    sql`SELECT id, name, is_admin, group_id FROM members WHERE group_id = ${groupId}`,
+    sql`SELECT ep.member_id, ep.amount FROM expense_payers ep JOIN expenses e ON e.id = ep.expense_id WHERE e.group_id = ${groupId}`,
+    sql`SELECT es.member_id, es.amount FROM expense_splits es JOIN expenses e ON e.id = es.expense_id WHERE e.group_id = ${groupId}`,
   ])
 
-  if (membersRes.error || expensesRes.error) {
-    return NextResponse.json({
-      error: 'Failed to fetch balances',
-      details: membersRes.error?.message || expensesRes.error?.message,
-    }, { status: 500 })
+  if (!members) {
+    return NextResponse.json({ error: 'Failed to fetch balances' }, { status: 500 })
   }
 
-  const members = (membersRes.data || []) as MemberRow[]
-  const expenses = (expensesRes.data || []) as ExpenseRow[]
-
-  // Compute totals per member
   const paidByMember: Record<string, number> = {}
   const owedByMember: Record<string, number> = {}
 
-  for (const e of expenses) {
-    for (const p of e.expense_payers) {
-      paidByMember[p.member_id] = (paidByMember[p.member_id] || 0) + Number(p.amount)
-    }
-    for (const s of e.expense_splits) {
-      owedByMember[s.member_id] = (owedByMember[s.member_id] || 0) + Number(s.amount)
-    }
+  for (const p of payers) {
+    paidByMember[p.member_id] = (paidByMember[p.member_id] || 0) + Number(p.amount)
+  }
+  for (const s of splits) {
+    owedByMember[s.member_id] = (owedByMember[s.member_id] || 0) + Number(s.amount)
   }
 
-  const balances = members.map(m => ({
+  const balances = (members as { id: string; name: string; is_admin: boolean; group_id: string }[]).map(m => ({
     id: m.id,
     name: m.name,
     is_admin: m.is_admin,

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { sql } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 
 export async function POST(request: Request) {
@@ -9,26 +9,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   }
 
-  const supabase = createServiceClient()
-
   // Find group by code (case-insensitive)
-  const { data: group } = await supabase
-    .from('groups')
-    .select('id, name, code, currency')
-    .ilike('code', groupCode.trim())
-    .single()
+  const groups = await sql`
+    SELECT id, name, code, currency FROM groups WHERE code ILIKE ${groupCode.trim()} LIMIT 1
+  `
+  const group = groups[0]
 
   if (!group) {
     return NextResponse.json({ error: 'Group not found. Check the code and try again.' }, { status: 401 })
   }
 
   // Check if name already exists in this group
-  const { data: existing } = await supabase
-    .from('members')
-    .select('id, is_admin')
-    .eq('group_id', group.id)
-    .ilike('name', memberName.trim())
-    .single()
+  const existingRows = await sql`
+    SELECT id, is_admin FROM members WHERE group_id = ${group.id} AND name ILIKE ${memberName.trim()} LIMIT 1
+  `
+  const existing = existingRows[0]
 
   let memberId: string
 
@@ -36,11 +31,10 @@ export async function POST(request: Request) {
     if (existing.is_admin) {
       // Admin path: try password before falling through to collision screen
       if (adminPassword?.trim()) {
-        const { data: groupWithHash } = await supabase
-          .from('groups')
-          .select('admin_password_hash')
-          .eq('id', group.id)
-          .single()
+        const groupRows = await sql`
+          SELECT admin_password_hash FROM groups WHERE id = ${group.id}
+        `
+        const groupWithHash = groupRows[0]
 
         const match = groupWithHash?.admin_password_hash
           ? await bcrypt.compare(adminPassword.trim(), groupWithHash.admin_password_hash)
@@ -74,13 +68,11 @@ export async function POST(request: Request) {
     memberId = existing.id   // re-pair path (unchanged)
   } else {
     // New member: create them first
-    const { data: member, error: memberErr } = await supabase
-      .from('members')
-      .insert({ group_id: group.id, name: memberName.trim() })
-      .select('id')
-      .single()
-
-    if (memberErr) {
+    const memberRows = await sql`
+      INSERT INTO members (group_id, name) VALUES (${group.id}, ${memberName.trim()}) RETURNING id
+    `
+    const member = memberRows[0]
+    if (!member) {
       return NextResponse.json({ error: 'Failed to join group' }, { status: 500 })
     }
     memberId = member.id
@@ -90,18 +82,16 @@ export async function POST(request: Request) {
   const code = String(Math.floor(100 + Math.random() * 900)) // 100–999
 
   // Remove any stale pending verifications for this member
-  await supabase
-    .from('pending_verifications')
-    .delete()
-    .eq('member_id', memberId)
+  await sql`DELETE FROM pending_verifications WHERE member_id = ${memberId}`
 
-  const { data: pending, error: pendingErr } = await supabase
-    .from('pending_verifications')
-    .insert({ group_id: group.id, member_id: memberId, code })
-    .select('id')
-    .single()
+  const pendingRows = await sql`
+    INSERT INTO pending_verifications (group_id, member_id, code)
+    VALUES (${group.id}, ${memberId}, ${code})
+    RETURNING id
+  `
+  const pending = pendingRows[0]
 
-  if (pendingErr) {
+  if (!pending) {
     return NextResponse.json({ error: 'Failed to start verification' }, { status: 500 })
   }
 

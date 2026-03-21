@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { sql } from '@/lib/db'
 
 export async function POST(request: Request) {
   const { token, memberName, confirmExisting } = await request.json()
@@ -8,38 +8,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   }
 
-  const supabase = createServiceClient()
-
   // Token must exist (no time check — scanner already passed the 120s window on GET)
-  const { data: qrToken } = await supabase
-    .from('qr_tokens')
-    .select('group_id, groups(id, name, code, currency)')
-    .eq('token', token)
-    .single()
+  const tokenRows = await sql`
+    SELECT qt.group_id, g.id, g.name, g.code, g.currency
+    FROM qr_tokens qt
+    JOIN groups g ON g.id = qt.group_id
+    WHERE qt.token = ${token}
+    LIMIT 1
+  `
+  const qrToken = tokenRows[0]
 
   if (!qrToken) {
     return NextResponse.json({ error: 'Invalid QR code' }, { status: 401 })
   }
 
-  const group = qrToken.groups as { id: string; name: string; code: string; currency: string }
+  const group = { id: qrToken.id, name: qrToken.name, code: qrToken.code, currency: qrToken.currency }
 
   // Check if name already exists in this group
-  const { data: existing } = await supabase
-    .from('members')
-    .select('id, is_admin')
-    .eq('group_id', group.id)
-    .ilike('name', memberName.trim())
-    .single()
+  const existingRows = await sql`
+    SELECT id, is_admin FROM members
+    WHERE group_id = ${group.id} AND name ILIKE ${memberName.trim()}
+    LIMIT 1
+  `
+  const existing = existingRows[0]
 
   if (!existing) {
     // New member — insert and return direct login
-    const { data: member, error: memberErr } = await supabase
-      .from('members')
-      .insert({ group_id: group.id, name: memberName.trim() })
-      .select('id')
-      .single()
+    const memberRows = await sql`
+      INSERT INTO members (group_id, name) VALUES (${group.id}, ${memberName.trim()}) RETURNING id
+    `
+    const member = memberRows[0]
 
-    if (memberErr) {
+    if (!member) {
       return NextResponse.json({ error: 'Failed to join group' }, { status: 500 })
     }
 
@@ -69,18 +69,16 @@ export async function POST(request: Request) {
   const code = String(Math.floor(100 + Math.random() * 900))
 
   // Remove stale pending verifications for this member
-  await supabase
-    .from('pending_verifications')
-    .delete()
-    .eq('member_id', memberId)
+  await sql`DELETE FROM pending_verifications WHERE member_id = ${memberId}`
 
-  const { data: pending, error: pendingErr } = await supabase
-    .from('pending_verifications')
-    .insert({ group_id: group.id, member_id: memberId, code })
-    .select('id')
-    .single()
+  const pendingRows = await sql`
+    INSERT INTO pending_verifications (group_id, member_id, code)
+    VALUES (${group.id}, ${memberId}, ${code})
+    RETURNING id
+  `
+  const pending = pendingRows[0]
 
-  if (pendingErr) {
+  if (!pending) {
     return NextResponse.json({ error: 'Failed to start verification' }, { status: 500 })
   }
 

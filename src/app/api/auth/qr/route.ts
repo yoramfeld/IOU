@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { sql } from '@/lib/db'
 import crypto from 'crypto'
 
 export async function POST(request: Request) {
@@ -9,34 +9,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   }
 
-  const supabase = createServiceClient()
-
   // Verify memberId exists in groupId (only group members can generate)
-  const { data: member } = await supabase
-    .from('members')
-    .select('id')
-    .eq('id', memberId)
-    .eq('group_id', groupId)
-    .single()
-
-  if (!member) {
+  const memberRows = await sql`
+    SELECT id FROM members WHERE id = ${memberId} AND group_id = ${groupId} LIMIT 1
+  `
+  if (memberRows.length === 0) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   // Cleanup: delete old tokens for the group (older than 10 min)
-  await supabase
-    .from('qr_tokens')
-    .delete()
-    .eq('group_id', groupId)
-    .lt('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
+  await sql`
+    DELETE FROM qr_tokens
+    WHERE group_id = ${groupId}
+    AND created_at < ${new Date(Date.now() - 10 * 60 * 1000).toISOString()}
+  `
 
   const token = crypto.randomBytes(24).toString('base64url')
 
-  const { error: insertError } = await supabase
-    .from('qr_tokens')
-    .insert({ group_id: groupId, token })
+  const insertResult = await sql`
+    INSERT INTO qr_tokens (group_id, token) VALUES (${groupId}, ${token})
+  `
 
-  if (insertError) {
+  if (!insertResult) {
     return NextResponse.json({ error: 'Failed to generate QR' }, { status: 500 })
   }
 
@@ -58,13 +52,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ valid: false, reason: 'not_found' })
   }
 
-  const supabase = createServiceClient()
-
-  const { data: qrToken } = await supabase
-    .from('qr_tokens')
-    .select('created_at, groups(id, name, code, currency)')
-    .eq('token', token)
-    .single()
+  const rows = await sql`
+    SELECT qt.created_at, g.id, g.name, g.code, g.currency
+    FROM qr_tokens qt
+    JOIN groups g ON g.id = qt.group_id
+    WHERE qt.token = ${token}
+    LIMIT 1
+  `
+  const qrToken = rows[0]
 
   if (!qrToken) {
     return NextResponse.json({ valid: false, reason: 'not_found' })
@@ -75,13 +70,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ valid: false, reason: 'expired' })
   }
 
-  const group = qrToken.groups as { id: string; name: string; code: string; currency: string }
-
   return NextResponse.json({
     valid: true,
-    groupName: group.name,
-    groupId: group.id,
-    groupCode: group.code,
-    currency: group.currency,
+    groupName: qrToken.name,
+    groupId: qrToken.id,
+    groupCode: qrToken.code,
+    currency: qrToken.currency,
   })
 }

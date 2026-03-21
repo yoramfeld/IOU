@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { sql } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,17 +11,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing groupId' }, { status: 400 })
   }
 
-  const supabase = createServiceClient()
-
-  const { data, error } = await supabase
-    .from('expenses')
-    .select('*, splits:expense_splits(*), payers:expense_payers(*)')
-    .eq('group_id', groupId)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    return NextResponse.json({ error: 'Failed to fetch expenses' }, { status: 500 })
-  }
+  const data = await sql`
+    SELECT
+      e.*,
+      COALESCE((SELECT json_agg(ep.*) FROM expense_payers ep WHERE ep.expense_id = e.id), '[]'::json) AS payers,
+      COALESCE((SELECT json_agg(es.*) FROM expense_splits es WHERE es.expense_id = e.id), '[]'::json) AS splits
+    FROM expenses e
+    WHERE e.group_id = ${groupId}
+    ORDER BY e.created_at DESC
+  `
 
   return NextResponse.json(data)
 }
@@ -50,59 +48,46 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Payer amounts must be positive' }, { status: 400 })
   }
 
-  const supabase = createServiceClient()
-
   // Verify enteredBy is a valid member of the group
   if (enteredBy !== paidBy) {
-    const { data: enterer } = await supabase
-      .from('members')
-      .select('id, group_id')
-      .eq('id', enteredBy)
-      .eq('group_id', groupId)
-      .single()
-    if (!enterer) {
+    const entererRows = await sql`
+      SELECT id FROM members WHERE id = ${enteredBy} AND group_id = ${groupId} LIMIT 1
+    `
+    if (entererRows.length === 0) {
       return NextResponse.json({ error: 'Not a member of this group' }, { status: 403 })
     }
   }
 
   // Create expense (paid_by = primary payer for display)
-  const { data: expense, error: expErr } = await supabase
-    .from('expenses')
-    .insert({
-      group_id: groupId,
-      paid_by: resolvedPayers[0].memberId,
-      amount: Number(amount),
-      description: description.trim(),
-      entered_by: enteredBy,
-    })
-    .select('id')
-    .single()
+  const expenseRows = await sql`
+    INSERT INTO expenses (group_id, paid_by, amount, description, entered_by)
+    VALUES (${groupId}, ${resolvedPayers[0].memberId}, ${Number(amount)}, ${description.trim()}, ${enteredBy})
+    RETURNING id
+  `
+  const expense = expenseRows[0]
 
-  if (expErr) {
+  if (!expense) {
     return NextResponse.json({ error: 'Failed to create expense' }, { status: 500 })
   }
 
   // Insert payers
-  const payerRows = resolvedPayers.map(p => ({
-    expense_id: expense.id,
-    member_id: p.memberId,
-    amount: Math.round(p.amount * 100) / 100,
-  }))
-
-  const { error: payerErr } = await supabase.from('expense_payers').insert(payerRows)
-
-  if (payerErr) {
-    await supabase.from('expenses').delete().eq('id', expense.id)
-    return NextResponse.json({ error: 'Failed to create payers' }, { status: 500 })
+  for (const p of resolvedPayers) {
+    const payerResult = await sql`
+      INSERT INTO expense_payers (expense_id, member_id, amount)
+      VALUES (${expense.id}, ${p.memberId}, ${Math.round(p.amount * 100) / 100})
+    `
+    if (!payerResult) {
+      await sql`DELETE FROM expenses WHERE id = ${expense.id}`
+      return NextResponse.json({ error: 'Failed to create payers' }, { status: 500 })
+    }
   }
 
   // Create splits
-  let splits: { expense_id: string; member_id: string; amount: number }[]
+  let splits: { memberId: string; amount: number }[]
 
   if (hasCustom) {
     splits = customSplits.map(({ memberId, amount: a }: { memberId: string; amount: number }) => ({
-      expense_id: expense.id,
-      member_id: memberId,
+      memberId,
       amount: -Math.round(a * 100) / 100,
     }))
   } else {
@@ -112,28 +97,24 @@ export async function POST(request: Request) {
     const remainder = totalCents - baseCents * n
 
     // Determine which members absorb the remainder cents.
-    // Give each extra cent to whoever currently owes the most to the group.
-    // Randomize within a tied tier.
     const remainderSet = new Set<string>()
     if (remainder > 0) {
-      const { data: groupExpenses } = await supabase
-        .from('expenses')
-        .select('expense_payers(member_id, amount), expense_splits(member_id, amount)')
-        .eq('group_id', groupId)
+      const [groupPayers, groupSplits] = await Promise.all([
+        sql`SELECT ep.member_id, ep.amount FROM expense_payers ep JOIN expenses e ON e.id = ep.expense_id WHERE e.group_id = ${groupId}`,
+        sql`SELECT es.member_id, es.amount FROM expense_splits es JOIN expenses e ON e.id = es.expense_id WHERE e.group_id = ${groupId}`,
+      ])
 
       const bal: Record<string, number> = {}
       for (const id of splitAmong) bal[id] = 0
-      for (const e of (groupExpenses ?? []) as { expense_payers: { member_id: string; amount: number }[]; expense_splits: { member_id: string; amount: number }[] }[]) {
-        for (const p of e.expense_payers) {
-          if (p.member_id in bal) bal[p.member_id] += Number(p.amount)
-        }
-        for (const s of e.expense_splits) {
-          if (s.member_id in bal) bal[s.member_id] += Number(s.amount)
-        }
+      for (const p of groupPayers) {
+        if (p.member_id in bal) bal[p.member_id] += Number(p.amount)
+      }
+      for (const s of groupSplits) {
+        if (s.member_id in bal) bal[s.member_id] += Number(s.amount)
       }
 
       // Sort ascending: most negative balance = owes most
-      const sorted = [...splitAmong].sort((a, b) => bal[a] - bal[b])
+      const sorted = [...splitAmong].sort((a: string, b: string) => bal[a] - bal[b])
 
       let assigned = 0
       let i = 0
@@ -157,20 +138,20 @@ export async function POST(request: Request) {
     }
 
     splits = splitAmong.map((memberId: string) => ({
-      expense_id: expense.id,
-      member_id: memberId,
+      memberId,
       amount: -(baseCents + (remainderSet.has(memberId) ? 1 : 0)) / 100,
     }))
   }
 
-  const { error: splitErr } = await supabase
-    .from('expense_splits')
-    .insert(splits)
-
-  if (splitErr) {
-    // Rollback expense (cascade deletes payers too)
-    await supabase.from('expenses').delete().eq('id', expense.id)
-    return NextResponse.json({ error: 'Failed to create splits' }, { status: 500 })
+  for (const s of splits) {
+    const splitResult = await sql`
+      INSERT INTO expense_splits (expense_id, member_id, amount)
+      VALUES (${expense.id}, ${s.memberId}, ${s.amount})
+    `
+    if (!splitResult) {
+      await sql`DELETE FROM expenses WHERE id = ${expense.id}`
+      return NextResponse.json({ error: 'Failed to create splits' }, { status: 500 })
+    }
   }
 
   return NextResponse.json({ ok: true })
@@ -183,14 +164,9 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   }
 
-  const supabase = createServiceClient()
-
   // Verify admin
-  const { data: admin } = await supabase
-    .from('members')
-    .select('is_admin')
-    .eq('id', adminId)
-    .single()
+  const adminRows = await sql`SELECT is_admin FROM members WHERE id = ${adminId} LIMIT 1`
+  const admin = adminRows[0]
 
   if (!admin?.is_admin) {
     return NextResponse.json({ error: 'Only admins can delete expenses' }, { status: 403 })
@@ -198,15 +174,7 @@ export async function DELETE(request: Request) {
 
   // Reset all expenses for a group
   if (resetAll && groupId) {
-    const { error } = await supabase
-      .from('expenses')
-      .delete()
-      .eq('group_id', groupId)
-
-    if (error) {
-      return NextResponse.json({ error: 'Failed to reset transactions' }, { status: 500 })
-    }
-
+    await sql`DELETE FROM expenses WHERE group_id = ${groupId}`
     return NextResponse.json({ ok: true })
   }
 
@@ -215,14 +183,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'Missing expenseId' }, { status: 400 })
   }
 
-  const { error } = await supabase
-    .from('expenses')
-    .delete()
-    .eq('id', expenseId)
-
-  if (error) {
-    return NextResponse.json({ error: 'Failed to delete expense' }, { status: 500 })
-  }
+  await sql`DELETE FROM expenses WHERE id = ${expenseId}`
 
   return NextResponse.json({ ok: true })
 }
