@@ -6,8 +6,9 @@ create table groups (
   name        text not null,
   code        text not null unique,
   currency    text not null default '€',
-  created_by  uuid,
-  created_at  timestamptz not null default now()
+  created_by          uuid,
+  admin_password_hash text,
+  created_at          timestamptz not null default now()
 );
 
 -- Members (scoped to a group)
