@@ -79,7 +79,8 @@ export default function ExpensesPage() {
     const balances: Record<string, number> = {}
 
     for (const exp of expenses) {
-      for (const p of (exp.payers ?? [])) {
+      const effectivePayers = exp.payers?.length ? exp.payers : [{ member_id: exp.paid_by, amount: exp.amount }]
+      for (const p of effectivePayers) {
         balances[p.member_id] = (balances[p.member_id] || 0) + Number(p.amount)
       }
       for (const s of exp.splits) {

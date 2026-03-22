@@ -11,10 +11,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing groupId' }, { status: 400 })
   }
 
-  const [members, payers, splits] = await Promise.all([
+  const [members, payers, splits, orphanExpenses] = await Promise.all([
     sql`SELECT id, name, is_admin, group_id FROM members WHERE group_id = ${groupId}`,
     sql`SELECT ep.member_id, ep.amount FROM expense_payers ep JOIN expenses e ON e.id = ep.expense_id WHERE e.group_id = ${groupId}`,
     sql`SELECT es.member_id, es.amount FROM expense_splits es JOIN expenses e ON e.id = es.expense_id WHERE e.group_id = ${groupId}`,
+    sql`SELECT e.paid_by AS member_id, e.amount FROM expenses e WHERE e.group_id = ${groupId} AND NOT EXISTS (SELECT 1 FROM expense_payers ep WHERE ep.expense_id = e.id)`,
   ])
 
   if (!members) {
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
   const paidByMember: Record<string, number> = {}
   const owedByMember: Record<string, number> = {}
 
-  for (const p of payers) {
+  for (const p of [...payers, ...orphanExpenses]) {
     paidByMember[p.member_id] = (paidByMember[p.member_id] || 0) + Number(p.amount)
   }
   for (const s of splits) {
