@@ -44,5 +44,5 @@ export async function GET(request: Request) {
 
   balances.sort((a, b) => a.balance - b.balance)
 
-  return NextResponse.json(balances)
+  return NextResponse.json({ balances, _debug: { payers, splits, orphanExpenses } })
 }
