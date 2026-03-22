@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { sql } from '@/lib/db'
+import { neon } from '@neondatabase/serverless'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,11 +11,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing groupId' }, { status: 400 })
   }
 
+  const db = neon(process.env.DATABASE_URL!)
+
   const [members, payers, splits, orphanExpenses] = await Promise.all([
-    sql`SELECT id, name, is_admin, group_id FROM members WHERE group_id = ${groupId}`,
-    sql`SELECT ep.member_id, ep.amount FROM expense_payers ep JOIN expenses e ON e.id = ep.expense_id WHERE e.group_id = ${groupId}`,
-    sql`SELECT es.member_id, es.amount FROM expense_splits es JOIN expenses e ON e.id = es.expense_id WHERE e.group_id = ${groupId}`,
-    sql`SELECT e.paid_by AS member_id, e.amount FROM expenses e WHERE e.group_id = ${groupId} AND NOT EXISTS (SELECT 1 FROM expense_payers ep WHERE ep.expense_id = e.id)`,
+    db`SELECT id, name, is_admin, group_id FROM members WHERE group_id = ${groupId}`,
+    db`SELECT ep.member_id, ep.amount FROM expense_payers ep JOIN expenses e ON e.id = ep.expense_id WHERE e.group_id = ${groupId}`,
+    db`SELECT es.member_id, es.amount FROM expense_splits es JOIN expenses e ON e.id = es.expense_id WHERE e.group_id = ${groupId}`,
+    db`SELECT e.paid_by AS member_id, e.amount FROM expenses e WHERE e.group_id = ${groupId} AND NOT EXISTS (SELECT 1 FROM expense_payers ep WHERE ep.expense_id = e.id)`,
   ])
 
   if (!members) {
@@ -44,5 +46,5 @@ export async function GET(request: Request) {
 
   balances.sort((a, b) => a.balance - b.balance)
 
-  return NextResponse.json({ balances, _debug: { payers, splits, orphanExpenses } })
+  return NextResponse.json(balances)
 }
