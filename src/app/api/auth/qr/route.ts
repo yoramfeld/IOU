@@ -34,7 +34,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to generate QR' }, { status: 500 })
   }
 
-  const origin = request.headers.get('origin') || ''
+  const origin =
+    request.headers.get('origin') ||
+    `${request.headers.get('x-forwarded-proto') || 'http'}://${request.headers.get('host')}`
   const qrUrl = `${origin}/qr?token=${token}`
 
   return NextResponse.json({
