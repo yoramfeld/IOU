@@ -13,11 +13,10 @@ export async function GET(request: Request) {
 
   const db = neon(process.env.DATABASE_URL!)
 
-  const [members, payers, splits, orphanExpenses] = await Promise.all([
+  const [members, splits, expensePaidBy] = await Promise.all([
     db`SELECT id, name, is_admin, group_id FROM members WHERE group_id = ${groupId}`,
-    db`SELECT ep.member_id, ep.amount FROM expense_payers ep JOIN expenses e ON e.id = ep.expense_id WHERE e.group_id = ${groupId}`,
-    db`SELECT es.member_id, es.amount FROM expense_splits es JOIN expenses e ON e.id = es.expense_id WHERE e.group_id = ${groupId}`,
-    db`SELECT e.paid_by AS member_id, e.amount FROM expenses e WHERE e.group_id = ${groupId} AND NOT EXISTS (SELECT 1 FROM expense_payers ep WHERE ep.expense_id = e.id)`,
+    db`SELECT es.member_id, es.amount FROM expense_splits es WHERE es.expense_id IN (SELECT id FROM expenses WHERE group_id = ${groupId})`,
+    db`SELECT paid_by AS member_id, amount FROM expenses WHERE group_id = ${groupId}`,
   ])
 
   if (!members) {
@@ -27,7 +26,7 @@ export async function GET(request: Request) {
   const paidByMember: Record<string, number> = {}
   const owedByMember: Record<string, number> = {}
 
-  for (const p of [...payers, ...orphanExpenses]) {
+  for (const p of expensePaidBy) {
     paidByMember[p.member_id] = (paidByMember[p.member_id] || 0) + Number(p.amount)
   }
   for (const s of splits) {
