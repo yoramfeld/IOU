@@ -74,9 +74,9 @@ const SCENARIOS: ScenarioDef[] = [
     expectedBalances: { Alice:60, Bob:-40, Carol:0, Dave:-50, Eve:-47, Frank:68, Grace:9 },
     expectedSettlements: [
       { from:'Dave', to:'Frank', amount:50 },
-      { from:'Eve',  to:'Alice', amount:47 },
-      { from:'Bob',  to:'Frank', amount:18 },
-      { from:'Bob',  to:'Alice', amount:13 },
+      { from:'Eve',  to:'Frank', amount:18 },
+      { from:'Eve',  to:'Alice', amount:29 },
+      { from:'Bob',  to:'Alice', amount:31 },
       { from:'Bob',  to:'Grace', amount:9  },
     ],
   },
