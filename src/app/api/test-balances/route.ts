@@ -128,27 +128,31 @@ const SCENARIOS: ScenarioDef[] = [
   },
 ]
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
+
 // ── Scenario runner ───────────────────────────────────────────────────────────
 
 async function runScenario(
   db: any, // eslint-disable-line @typescript-eslint/no-explicit-any
   scenario: ScenarioDef,
-  log: (text: string, status?: 'info' | 'ok' | 'fail') => void
+  log: (text: string, status?: 'info' | 'ok' | 'fail') => Promise<void>
 ): Promise<ScenarioSummary> {
   let groupId: string | null = null
   const failedChecks: { label: string; expected: string; actual: string }[] = []
   let passed = 0
 
-  function check(label: string, expected: number, actual: number, tol = 0.005) {
+  async function check(label: string, expected: number, actual: number, tol = 0.005) {
     const ok = Math.abs(actual - expected) < tol
     const exp = String(expected)
     const act = String(Math.round(actual * 100) / 100)
     if (ok) {
       passed++
-      log(`  ${label}: ${act} ✓`, 'ok')
+      await log(`  ${label}: ${act} ✓`, 'ok')
     } else {
       failedChecks.push({ label, expected: exp, actual: act })
-      log(`  ${label}: expected ${exp}, got ${act} ✗`, 'fail')
+      await log(`  ${label}: expected ${exp}, got ${act} ✗`, 'fail')
     }
   }
 
@@ -157,14 +161,14 @@ async function runScenario(
     const code = 'test-' + Math.random().toString(36).slice(2, 10)
     const [group] = await db`INSERT INTO groups (name, code, currency) VALUES (${scenario.name}, ${code}, '€') RETURNING id`
     groupId = group.id
-    log(`Created group "${scenario.name}" (${code})`, 'ok')
+    await log(`Created group "${scenario.name}" (${code})`, 'ok')
 
     // Helper: add a single member
     const memberIds: Record<string, string> = {}
     const addMember = async (name: string) => {
       const [m] = await db`INSERT INTO members (group_id, name, is_admin) VALUES (${groupId}, ${name}, false) RETURNING id`
       memberIds[name] = m.id
-      log(`  Added member: ${name}`, 'info')
+      await log(`  Added member: ${name}`, 'info')
     }
 
     // Helper: add a single expense
@@ -173,7 +177,7 @@ async function runScenario(
       const primaryPayerId = memberIds[exp.payers[0][0]]
       const payerNames = exp.payers.map(([n, a]) => `${n} €${a}`).join(' + ')
       const splitNames = exp.splits.map(([n, a]) => `${n}=€${a}`).join(', ')
-      log(`  Adding expense: "${exp.desc}" — paid by ${payerNames}, split: ${splitNames}`, 'info')
+      await log(`  Adding expense: "${exp.desc}" — paid by ${payerNames}, split: ${splitNames}`, 'info')
       const [e] = await db`INSERT INTO expenses (group_id, paid_by, amount, description, entered_by) VALUES (${groupId}, ${primaryPayerId}, ${totalAmount}, ${exp.desc}, ${primaryPayerId}) RETURNING id`
       for (const [name, amt] of exp.payers) {
         await db`INSERT INTO expense_payers (expense_id, member_id, amount) VALUES (${e.id}, ${memberIds[name]}, ${amt})`
@@ -185,7 +189,7 @@ async function runScenario(
 
     if (scenario.waves) {
       for (const wave of scenario.waves) {
-        log(`── ${wave.label} ──`, 'info')
+        await log(`── ${wave.label} ──`, 'info')
         for (const name of wave.newMembers) await addMember(name)
         for (const exp of wave.expenses) await addExpense(exp)
       }
@@ -195,7 +199,7 @@ async function runScenario(
     }
 
     // Query balances via expense_payers (supports multi-payer)
-    log('Querying balances from DB...', 'info')
+    await log('Querying balances from DB...', 'info')
     const [members, payers, splits] = await Promise.all([
       db`SELECT id, name FROM members WHERE group_id = ${groupId}`,
       db`SELECT ep.member_id, ep.amount FROM expense_payers ep WHERE ep.expense_id IN (SELECT id FROM expenses WHERE group_id = ${groupId})`,
@@ -216,7 +220,7 @@ async function runScenario(
 
     // Balance sum sanity
     const balanceSum = balances.reduce((s, b) => s + b.balance, 0)
-    log('Verifying balances...', 'info')
+    await log('Verifying balances...', 'info')
     check('Sum of all balances = 0', 0, balanceSum)
 
     for (const b of balances) {
@@ -225,16 +229,16 @@ async function runScenario(
     }
 
     // Settlements
-    log('Running settlement algorithm...', 'info')
+    await log('Running settlement algorithm...', 'info')
     const transfers = calculateSettlements(balances)
     const nameById = Object.fromEntries(balances.map(b => [b.id, b.name]))
     const expectedCount = scenario.expectedSettlements.length
 
     if (transfers.length !== expectedCount) {
       failedChecks.push({ label: 'Settlement count', expected: String(expectedCount), actual: String(transfers.length) })
-      log(`  Settlement count: expected ${expectedCount}, got ${transfers.length} ✗`, 'fail')
+      await log(`  Settlement count: expected ${expectedCount}, got ${transfers.length} ✗`, 'fail')
     } else {
-      log('Verifying settlements...', 'info')
+      await log('Verifying settlements...', 'info')
       for (let i = 0; i < scenario.expectedSettlements.length; i++) {
         const exp = scenario.expectedSettlements[i]
         const act = transfers[i]
@@ -245,10 +249,10 @@ async function runScenario(
         const actStr = `${fromName}→${toName} €${Math.round(act.amount*100)/100}`
         if (ok) {
           passed++
-          log(`  ${label} ✓`, 'ok')
+          await log(`  ${label} ✓`, 'ok')
         } else {
           failedChecks.push({ label, expected: `${exp.from}→${exp.to} €${exp.amount}`, actual: actStr })
-          log(`  ${label}: got ${actStr} ✗`, 'fail')
+          await log(`  ${label}: got ${actStr} ✗`, 'fail')
         }
       }
     }
@@ -256,12 +260,12 @@ async function runScenario(
   } finally {
     if (groupId) {
       await db`DELETE FROM groups WHERE id = ${groupId}`
-      log(`Cleaned up group ${groupId.slice(0, 8)}…`, 'info')
+      await log(`Cleaned up group ${groupId.slice(0, 8)}…`, 'info')
     }
   }
 
   const failed = failedChecks.length
-  log(
+  await log(
     failed === 0
       ? `✓ ${scenario.name}: all ${passed} checks passed`
       : `✗ ${scenario.name}: ${failed} checks failed`,
@@ -306,10 +310,13 @@ export async function GET(request: Request) {
         for (let i = 0; i < SCENARIOS.length; i++) {
           const scenario = SCENARIOS[i]
           send({ type: 'step', text: `── Scenario ${i+1}/${total}: ${scenario.name} ──`, status: 'info' })
+          await sleep(250)
           send({ type: 'step', text: scenario.description, status: 'info' })
+          await sleep(250)
 
-          const summary = await runScenario(db, scenario, (text, status = 'info') => {
+          const summary = await runScenario(db, scenario, async (text, status = 'info') => {
             send({ type: 'step', text, status })
+            await sleep(250)
           })
           results.push(summary)
         }
