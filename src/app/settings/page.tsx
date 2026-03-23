@@ -96,6 +96,7 @@ export default function SettingsPage() {
 
   async function handleRunTest() {
     if (!session) return
+    if (dismissTimer.current) clearTimeout(dismissTimer.current)
     setTestState('running')
     setTestSteps([])
     setTestResult(null)
@@ -124,9 +125,10 @@ export default function SettingsPage() {
           } catch { /* ignore malformed */ }
         }
       }
+      setTestSteps([])
       setTestState('done')
       if (dismissTimer.current) clearTimeout(dismissTimer.current)
-      dismissTimer.current = setTimeout(() => { setTestState('idle'); setTestSteps([]) }, 45000)
+      dismissTimer.current = setTimeout(() => { setTestState('idle'); setTestResult(null) }, 45000)
     } catch {
       setTestState('idle')
       alert('Test failed to run')
