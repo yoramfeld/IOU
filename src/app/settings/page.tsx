@@ -126,7 +126,7 @@ export default function SettingsPage() {
       }
       setTestState('done')
       if (dismissTimer.current) clearTimeout(dismissTimer.current)
-      dismissTimer.current = setTimeout(() => { setTestState('idle'); setTestSteps([]) }, 30000)
+      dismissTimer.current = setTimeout(() => { setTestState('idle'); setTestSteps([]) }, 45000)
     } catch {
       setTestState('idle')
       alert('Test failed to run')

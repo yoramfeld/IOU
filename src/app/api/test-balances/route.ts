@@ -12,11 +12,18 @@ type ExpenseDef = {
   splits: [string, number][]   // [memberName, positiveAmount stored as negative]
 }
 
+type WaveDef = {
+  label: string
+  newMembers: string[]
+  expenses: ExpenseDef[]
+}
+
 type ScenarioDef = {
   name: string
   description: string
   members: string[]
   expenses: ExpenseDef[]
+  waves?: WaveDef[]  // if set, members/expenses come from waves (executed in order)
   expectedBalances: Record<string, number>
   expectedSettlements: { from: string; to: string; amount: number }[]
 }
@@ -36,25 +43,41 @@ type ScenarioSummary = {
 
 const SCENARIOS: ScenarioDef[] = [
   {
-    name: 'S1: Complex 7-member group',
-    description: 'Even/custom/subset splits, zero-balance member, 5 settlement transfers',
+    name: 'S1: 7-member group (members join in two waves)',
+    description: '3 members transact first; 4 more join and all 7 continue — zero-balance member, 5 settlements',
     members: ['Alice','Bob','Carol','Dave','Eve','Frank','Grace'],
-    expenses: [
-      { desc:'Dinner',    payers:[['Alice',140]], splits:[['Alice',20],['Bob',20],['Carol',20],['Dave',20],['Eve',20],['Frank',20],['Grace',20]] },
-      { desc:'Taxi',      payers:[['Bob',60]],    splits:[['Bob',20],['Carol',20],['Dave',20]] },
-      { desc:'Hotel',     payers:[['Carol',90]],  splits:[['Alice',18],['Bob',18],['Carol',18],['Dave',18],['Eve',18]] },
-      { desc:'Museum',    payers:[['Dave',55]],   splits:[['Alice',10],['Bob',15],['Dave',30]] },
-      { desc:'Groceries', payers:[['Eve',42]],    splits:[['Eve',14],['Frank',14],['Grace',14]] },
-      { desc:'Concert',   payers:[['Frank',119]], splits:[['Alice',17],['Bob',17],['Carol',17],['Dave',17],['Eve',17],['Frank',17],['Grace',17]] },
-      { desc:'Spa',       payers:[['Grace',75]],  splits:[['Bob',25],['Carol',15],['Eve',20],['Grace',15]] },
+    expenses: [],
+    waves: [
+      {
+        label: 'Alice, Bob, Carol join',
+        newMembers: ['Alice','Bob','Carol'],
+        expenses: [
+          { desc:'Coffee run', payers:[['Alice',30]], splits:[['Alice',10],['Bob',10],['Carol',10]] },
+          { desc:'Lunch',      payers:[['Bob',60]],   splits:[['Alice',20],['Bob',20],['Carol',20]] },
+          { desc:'Snacks',     payers:[['Carol',45]], splits:[['Alice',15],['Bob',15],['Carol',15]] },
+        ],
+      },
+      {
+        label: 'Dave, Eve, Frank, Grace join',
+        newMembers: ['Dave','Eve','Frank','Grace'],
+        expenses: [
+          { desc:'Dinner',    payers:[['Alice',140]], splits:[['Alice',20],['Bob',20],['Carol',20],['Dave',20],['Eve',20],['Frank',20],['Grace',20]] },
+          { desc:'Taxi',      payers:[['Bob',60]],    splits:[['Bob',20],['Carol',20],['Dave',20]] },
+          { desc:'Hotel',     payers:[['Carol',90]],  splits:[['Alice',18],['Bob',18],['Carol',18],['Dave',18],['Eve',18]] },
+          { desc:'Museum',    payers:[['Dave',55]],   splits:[['Alice',10],['Bob',15],['Dave',30]] },
+          { desc:'Groceries', payers:[['Eve',42]],    splits:[['Eve',14],['Frank',14],['Grace',14]] },
+          { desc:'Concert',   payers:[['Frank',119]], splits:[['Alice',17],['Bob',17],['Carol',17],['Dave',17],['Eve',17],['Frank',17],['Grace',17]] },
+          { desc:'Spa',       payers:[['Grace',75]],  splits:[['Bob',25],['Carol',15],['Eve',20],['Grace',15]] },
+        ],
+      },
     ],
-    expectedBalances: { Alice:75, Bob:-55, Carol:0, Dave:-50, Eve:-47, Frank:68, Grace:9 },
+    expectedBalances: { Alice:60, Bob:-40, Carol:0, Dave:-50, Eve:-47, Frank:68, Grace:9 },
     expectedSettlements: [
-      { from:'Bob',  to:'Alice', amount:55 },
-      { from:'Dave', to:'Alice', amount:20 },
-      { from:'Dave', to:'Frank', amount:30 },
-      { from:'Eve',  to:'Frank', amount:38 },
-      { from:'Eve',  to:'Grace', amount:9  },
+      { from:'Dave', to:'Frank', amount:50 },
+      { from:'Eve',  to:'Alice', amount:47 },
+      { from:'Bob',  to:'Frank', amount:18 },
+      { from:'Bob',  to:'Alice', amount:13 },
+      { from:'Bob',  to:'Grace', amount:9  },
     ],
   },
   {
@@ -136,22 +159,21 @@ async function runScenario(
     groupId = group.id
     log(`Created group "${scenario.name}" (${code})`, 'ok')
 
-    // Create members
+    // Helper: add a single member
     const memberIds: Record<string, string> = {}
-    for (const name of scenario.members) {
+    const addMember = async (name: string) => {
       const [m] = await db`INSERT INTO members (group_id, name, is_admin) VALUES (${groupId}, ${name}, false) RETURNING id`
       memberIds[name] = m.id
       log(`  Added member: ${name}`, 'info')
     }
 
-    // Insert expenses
-    for (const exp of scenario.expenses) {
+    // Helper: add a single expense
+    const addExpense = async (exp: ExpenseDef) => {
       const totalAmount = exp.payers.reduce((s, [, a]) => s + a, 0)
       const primaryPayerId = memberIds[exp.payers[0][0]]
       const payerNames = exp.payers.map(([n, a]) => `${n} €${a}`).join(' + ')
       const splitNames = exp.splits.map(([n, a]) => `${n}=€${a}`).join(', ')
       log(`  Adding expense: "${exp.desc}" — paid by ${payerNames}, split: ${splitNames}`, 'info')
-
       const [e] = await db`INSERT INTO expenses (group_id, paid_by, amount, description, entered_by) VALUES (${groupId}, ${primaryPayerId}, ${totalAmount}, ${exp.desc}, ${primaryPayerId}) RETURNING id`
       for (const [name, amt] of exp.payers) {
         await db`INSERT INTO expense_payers (expense_id, member_id, amount) VALUES (${e.id}, ${memberIds[name]}, ${amt})`
@@ -159,6 +181,17 @@ async function runScenario(
       for (const [name, amt] of exp.splits) {
         await db`INSERT INTO expense_splits (expense_id, member_id, amount) VALUES (${e.id}, ${memberIds[name]}, ${-amt})`
       }
+    }
+
+    if (scenario.waves) {
+      for (const wave of scenario.waves) {
+        log(`── ${wave.label} ──`, 'info')
+        for (const name of wave.newMembers) await addMember(name)
+        for (const exp of wave.expenses) await addExpense(exp)
+      }
+    } else {
+      for (const name of scenario.members) await addMember(name)
+      for (const exp of scenario.expenses) await addExpense(exp)
     }
 
     // Query balances via expense_payers (supports multi-payer)
