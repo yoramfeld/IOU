@@ -9,8 +9,13 @@ import GroupSettings from '@/components/settings/GroupSettings'
 type TestResult = {
   passed: number
   failed: number
-  balanceChecks: { member: string; expected: number; actual: number; pass: boolean }[]
-  settlementChecks: { from: string; to: string; expected: number; actual: number | null; pass: boolean }[]
+  scenarios: {
+    name: string
+    description: string
+    passed: number
+    failed: number
+    failedChecks: { label: string; expected: string; actual: string }[]
+  }[]
 }
 
 export default function SettingsPage() {
@@ -163,25 +168,26 @@ export default function SettingsPage() {
             {testState === 'running' ? 'Running test…' : 'Run balance test'}
           </button>
           {testState === 'done' && testResult && (
-            <div className={`rounded-lg p-3 text-sm ${testResult.failed === 0 ? 'bg-green/10 text-green' : 'bg-red/10 text-red'}`}>
-              <p className="font-semibold mb-1">
+            <div className={`rounded-lg p-3 text-sm space-y-2 ${testResult.failed === 0 ? 'bg-green/10' : 'bg-red/10'}`}>
+              <p className={`font-semibold ${testResult.failed === 0 ? 'text-green' : 'text-red'}`}>
                 {testResult.failed === 0
-                  ? `✓ All ${testResult.passed} checks passed`
+                  ? `✓ All ${testResult.passed} checks passed across ${testResult.scenarios.length} scenarios`
                   : `✗ ${testResult.failed} of ${testResult.passed + testResult.failed} checks failed`}
               </p>
-              {testResult.failed > 0 && (
-                <ul className="text-xs space-y-0.5">
-                  {[...testResult.balanceChecks, ...testResult.settlementChecks]
-                    .filter(c => !c.pass)
-                    .map((c, i) => (
-                      <li key={i}>
-                        {'member' in c
-                          ? `Balance ${c.member}: expected ${c.expected}, got ${c.actual}`
-                          : `Settlement ${c.from}→${c.to}: expected ${c.expected}, got ${c.actual}`}
-                      </li>
-                    ))}
-                </ul>
-              )}
+              {testResult.scenarios.map((s, i) => (
+                <div key={i} className="text-xs">
+                  <span className={s.failed === 0 ? 'text-green' : 'text-red'}>
+                    {s.failed === 0 ? '✓' : '✗'} {s.name} ({s.passed}/{s.passed + s.failed})
+                  </span>
+                  {s.failedChecks.length > 0 && (
+                    <ul className="ml-3 mt-0.5 space-y-0.5 text-red">
+                      {s.failedChecks.map((c, j) => (
+                        <li key={j}>{c.label}: expected {c.expected}, got {c.actual}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
