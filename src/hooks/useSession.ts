@@ -71,7 +71,7 @@ export function useSession() {
   async function joinGroup(
     groupCode: string,
     memberName: string,
-    options?: { confirmExisting?: boolean; adminPassword?: string }
+    options?: { confirmExisting?: boolean; password?: string }
   ): Promise<{ ok: boolean; error?: string; verification?: VerificationData; collision?: NameCollisionData }> {
     const res = await fetch('/api/auth/join-group', {
       method: 'POST',

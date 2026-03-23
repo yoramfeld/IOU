@@ -13,11 +13,12 @@ create table groups (
 
 -- Members (scoped to a group)
 create table members (
-  id          uuid primary key default uuid_generate_v4(),
-  group_id    uuid not null references groups(id) on delete cascade,
-  name        text not null,
-  is_admin    boolean not null default false,
-  created_at  timestamptz not null default now()
+  id            uuid primary key default uuid_generate_v4(),
+  group_id      uuid not null references groups(id) on delete cascade,
+  name          text not null,
+  is_admin      boolean not null default false,
+  password_hash text,
+  created_at    timestamptz not null default now()
 );
 create unique index members_name_group_unique on members (group_id, lower(name));
 

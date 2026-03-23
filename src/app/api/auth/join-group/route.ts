@@ -3,7 +3,7 @@ import { sql } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 
 export async function POST(request: Request) {
-  const { groupCode, memberName, confirmExisting, adminPassword } = await request.json()
+  const { groupCode, memberName, confirmExisting, password } = await request.json()
 
   if (!groupCode?.trim() || !memberName?.trim()) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
@@ -21,40 +21,42 @@ export async function POST(request: Request) {
 
   // Check if name already exists in this group
   const existingRows = await sql`
-    SELECT id, is_admin FROM members WHERE group_id = ${group.id} AND name ILIKE ${memberName.trim()} LIMIT 1
+    SELECT id, is_admin, password_hash FROM members
+    WHERE group_id = ${group.id} AND name ILIKE ${memberName.trim()} LIMIT 1
   `
   const existing = existingRows[0]
 
   let memberId: string
 
   if (existing) {
-    if (existing.is_admin) {
-      // Admin path: try password before falling through to collision screen
-      if (adminPassword?.trim()) {
-        const groupRows = await sql`
-          SELECT admin_password_hash FROM groups WHERE id = ${group.id}
-        `
-        const groupWithHash = groupRows[0]
+    // Try password-based direct login for any member
+    if (password?.trim()) {
+      let match = false
 
-        const match = groupWithHash?.admin_password_hash
-          ? await bcrypt.compare(adminPassword.trim(), groupWithHash.admin_password_hash)
-          : false
-
-        if (match) {
-          // Direct login — no P2P needed
-          return NextResponse.json({
-            directLogin: true,
-            memberId: existing.id,
-            memberName: memberName.trim(),
-            groupId: group.id,
-            groupName: group.name,
-            groupCode: group.code,
-            currency: group.currency,
-            isAdmin: true,
-          })
-        }
-        // Wrong password — fall through to collision screen (don't reveal mismatch)
+      if (existing.password_hash) {
+        match = await bcrypt.compare(password.trim(), existing.password_hash)
       }
+
+      // Also try group admin_password_hash for admins (backward compat)
+      if (!match && existing.is_admin) {
+        const groupRows = await sql`SELECT admin_password_hash FROM groups WHERE id = ${group.id}`
+        const groupHash = groupRows[0]?.admin_password_hash
+        if (groupHash) match = await bcrypt.compare(password.trim(), groupHash)
+      }
+
+      if (match) {
+        return NextResponse.json({
+          directLogin: true,
+          memberId: existing.id,
+          memberName: memberName.trim(),
+          groupId: group.id,
+          groupName: group.name,
+          groupCode: group.code,
+          currency: group.currency,
+          isAdmin: existing.is_admin,
+        })
+      }
+      // Wrong password — fall through to collision screen (don't reveal mismatch)
     }
 
     if (!confirmExisting) {
@@ -65,11 +67,14 @@ export async function POST(request: Request) {
         memberName: memberName.trim(),
       })
     }
-    memberId = existing.id   // re-pair path (unchanged)
+    memberId = existing.id   // re-pair path
   } else {
-    // New member: create them first
+    // New member: create them, optionally store recovery password
+    const hash = password?.trim() ? await bcrypt.hash(password.trim(), 10) : null
     const memberRows = await sql`
-      INSERT INTO members (group_id, name) VALUES (${group.id}, ${memberName.trim()}) RETURNING id
+      INSERT INTO members (group_id, name, password_hash)
+      VALUES (${group.id}, ${memberName.trim()}, ${hash})
+      RETURNING id
     `
     const member = memberRows[0]
     if (!member) {

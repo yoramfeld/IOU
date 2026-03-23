@@ -22,6 +22,11 @@ type TestResult = {
 export default function SettingsPage() {
   const router = useRouter()
   const { session, loading, logout, updateSession } = useSession()
+  const [pwCurrent, setPwCurrent] = useState('')
+  const [pwNew, setPwNew] = useState('')
+  const [pwConfirm, setPwConfirm] = useState('')
+  const [pwMsg, setPwMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  const [pwSaving, setPwSaving] = useState(false)
   const [testState, setTestState] = useState<'idle' | 'running' | 'done'>('idle')
   const [testSteps, setTestSteps] = useState<StepLine[]>([])
   const [testResult, setTestResult] = useState<TestResult | null>(null)
@@ -31,10 +36,6 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!loading && !session) {
       router.replace('/')
-      return
-    }
-    if (!loading && session && !session.isAdmin) {
-      router.replace('/expenses')
     }
   }, [session, loading, router])
 
@@ -191,6 +192,27 @@ export default function SettingsPage() {
     clearReport()
   }
 
+  async function handleSetPassword() {
+    if (!session) return
+    if (pwNew !== pwConfirm) { setPwMsg({ text: 'Passwords do not match', ok: false }); return }
+    if (pwNew && pwNew.length < 4) { setPwMsg({ text: 'Password must be at least 4 characters', ok: false }); return }
+    setPwSaving(true)
+    setPwMsg(null)
+    const res = await fetch('/api/auth/set-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberId: session.memberId, currentPassword: pwCurrent || undefined, newPassword: pwNew || undefined }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setPwMsg({ text: pwNew ? 'Password saved.' : 'Password removed.', ok: true })
+      setPwCurrent(''); setPwNew(''); setPwConfirm('')
+    } else {
+      setPwMsg({ text: data.error || 'Failed to save', ok: false })
+    }
+    setPwSaving(false)
+  }
+
   async function handleClearPending() {
     if (!session) return
     if (!confirm('Clear all pending join requests? Users waiting for approval will need to try again.')) return
@@ -210,7 +232,7 @@ export default function SettingsPage() {
     alert('Pending requests cleared.')
   }
 
-  if (!session || !session.isAdmin) return null
+  if (!session) return null
 
   return (
     <div className="phone-frame pb-20">
@@ -224,9 +246,23 @@ export default function SettingsPage() {
       </header>
 
       <main className="p-4">
-        <GroupSettings session={session} onUpdate={handleUpdate} />
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-ink-soft">Recovery password</h2>
+          <p className="text-xs text-ink-muted">
+            Set a password so you can rejoin without waiting for approval if you ever clear your cache.
+          </p>
+          <input className="input" placeholder="Current password (leave blank if not set)" type="password" value={pwCurrent} onChange={e => setPwCurrent(e.target.value)} />
+          <input className="input" placeholder="New password (leave blank to remove)" type="password" value={pwNew} onChange={e => setPwNew(e.target.value)} />
+          <input className="input" placeholder="Confirm new password" type="password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} />
+          {pwMsg && <p className={`text-xs ${pwMsg.ok ? 'text-green' : 'text-red'}`}>{pwMsg.text}</p>}
+          <button onClick={handleSetPassword} disabled={pwSaving} className="btn btn-outline">
+            {pwSaving ? 'Saving…' : 'Save password'}
+          </button>
+        </div>
 
-        <div className="mt-8 pt-6 border-t border-border space-y-4">
+        {session.isAdmin && <GroupSettings session={session} onUpdate={handleUpdate} />}
+
+        {session.isAdmin && <div className="mt-8 pt-6 border-t border-border space-y-4">
           <div>
             <p className="text-xs text-ink-muted mb-2">
               Clear stale join requests that are showing the &ldquo;Approve a friend&rdquo; bar.
@@ -235,9 +271,9 @@ export default function SettingsPage() {
               Clear pending requests
             </button>
           </div>
-        </div>
+        </div>}
 
-        <div className="mt-8 pt-6 border-t border-border space-y-3">
+        {session.isAdmin && <div className="mt-8 pt-6 border-t border-border space-y-3">
           <h2 className="text-sm font-semibold text-ink-soft mb-1">Developer tools</h2>
           <p className="text-xs text-ink-muted">
             Runs 5 test scenarios (7-member, rounding, pure debtor, 2-person, multi-payer), verifies balances and settlements, then cleans up.
@@ -299,9 +335,9 @@ export default function SettingsPage() {
               ))}
             </div>
           )}
-        </div>
+        </div>}
 
-        <div className="mt-8 pt-6 border-t border-border">
+        {session.isAdmin && <div className="mt-8 pt-6 border-t border-border">
           <h2 className="text-sm font-semibold text-red mb-1">Danger zone</h2>
           <p className="text-xs text-ink-muted mb-3">
             Delete all expenses and settlements. Members will be kept.
@@ -309,7 +345,7 @@ export default function SettingsPage() {
           <button onClick={handleReset} className="btn bg-red text-white hover:bg-red/90">
             Reset all transactions
           </button>
-        </div>
+        </div>}
       </main>
 
       <BottomNav active="settings" isAdmin={session.isAdmin} groupId={session.groupId} />

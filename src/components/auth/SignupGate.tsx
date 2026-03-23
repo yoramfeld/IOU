@@ -32,7 +32,7 @@ export default function SignupGate({ initialStep, onBack }: Props = {}) {
   const [groupCode, setGroupCode] = useState('')
   const [joinCode, setJoinCode] = useState('')
   const [adminPassword, setAdminPassword] = useState('')
-  const [joinAdminPassword, setJoinAdminPassword] = useState('')
+  const [joinPassword, setJoinPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [verification, setVerification] = useState<VerificationData | null>(null)
@@ -57,7 +57,7 @@ export default function SignupGate({ initialStep, onBack }: Props = {}) {
     setSubmitting(true)
     setError('')
     const result = await joinGroup(joinCode.trim().toLowerCase(), memberName.trim(), {
-      adminPassword: joinAdminPassword || undefined,
+      password: joinPassword || undefined,
     })
     if (result.ok) {
       router.push('/expenses')
@@ -141,13 +141,13 @@ export default function SignupGate({ initialStep, onBack }: Props = {}) {
             <div className="space-y-1">
               <input
                 className="input"
-                placeholder="Admin recovery password (optional)"
+                placeholder="Recovery password (optional)"
                 type="password"
                 value={adminPassword}
                 onChange={e => setAdminPassword(e.target.value)}
               />
               <p className="text-xs text-ink-muted px-1">
-                Set this if you want to rejoin without group approval after clearing your cache.
+                Set this to rejoin without group approval after clearing your cache.
               </p>
             </div>
             {error && <p className="text-red text-sm">{error}</p>}
@@ -205,10 +205,10 @@ export default function SignupGate({ initialStep, onBack }: Props = {}) {
             />
             <input
               className="input"
-              placeholder="Admin password (if you're the group admin)"
+              placeholder="Recovery password (optional — set one to rejoin without approval)"
               type="password"
-              value={joinAdminPassword}
-              onChange={e => setJoinAdminPassword(e.target.value)}
+              value={joinPassword}
+              onChange={e => setJoinPassword(e.target.value)}
             />
             {error && <p className="text-red text-sm">{error}</p>}
             <button

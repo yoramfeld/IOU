@@ -14,11 +14,11 @@ const NAV = [
   { key: 'expenses', href: '/expenses', label: 'Expenses', icon: '💰', hardNav: false },
   { key: 'board',    href: '/board',    label: 'Board',    icon: '📊', hardNav: true },
   { key: 'settle',   href: '/settle',   label: 'Settle',   icon: '🤝', hardNav: true },
-  { key: 'settings', href: '/settings', label: 'Settings', icon: '⚙️', adminOnly: true, hardNav: false },
+  { key: 'settings', href: '/settings', label: 'Settings', icon: '⚙️', hardNav: false },
 ]
 
 export default function BottomNav({ active, isAdmin, groupId }: Props) {
-  const items = NAV.filter((n) => !n.adminOnly || isAdmin)
+  const items = NAV
 
   return (
     <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm z-20">

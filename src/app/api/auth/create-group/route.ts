@@ -31,10 +31,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to create group' }, { status: 500 })
   }
 
-  // Create first member (admin)
+  // Create first member (admin) — also store their personal recovery password hash
   const members = await sql`
-    INSERT INTO members (group_id, name, is_admin)
-    VALUES (${group.id}, ${memberName.trim()}, true)
+    INSERT INTO members (group_id, name, is_admin, password_hash)
+    VALUES (${group.id}, ${memberName.trim()}, true, ${hash})
     RETURNING id, name, is_admin
   `
   const member = members[0]

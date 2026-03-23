@@ -18,6 +18,7 @@ function QRContent() {
   const [step, setStep] = useState<Step>('loading')
   const [groupName, setGroupName] = useState('')
   const [memberName, setMemberName] = useState('')
+  const [password, setPassword] = useState('')
   const [invalidReason, setInvalidReason] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -64,7 +65,7 @@ function QRContent() {
       const res = await fetch('/api/auth/qr-join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, memberName: memberName.trim() }),
+        body: JSON.stringify({ token, memberName: memberName.trim(), password: password || undefined }),
       })
       const data = await res.json()
 
@@ -105,13 +106,28 @@ function QRContent() {
       const res = await fetch('/api/auth/qr-join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, memberName: memberName.trim(), confirmExisting: true }),
+        body: JSON.stringify({ token, memberName: memberName.trim(), confirmExisting: true, password: password || undefined }),
       })
       const data = await res.json()
 
       if (!res.ok) {
         setError(data.error || 'Invalid QR code')
         setSubmitting(false)
+        return
+      }
+
+      if (data.directLogin) {
+        const s: MemberSession = {
+          groupId: data.groupId,
+          groupName: data.groupName,
+          groupCode: data.groupCode,
+          currency: data.currency,
+          memberId: data.memberId,
+          name: data.memberName,
+          isAdmin: data.isAdmin,
+        }
+        setSession(s)
+        router.replace('/expenses')
         return
       }
 
@@ -158,8 +174,15 @@ function QRContent() {
               placeholder="Your name"
               value={memberName}
               onChange={e => setMemberName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleJoin()}
               autoFocus
+            />
+            <input
+              className="input"
+              placeholder="Recovery password (optional)"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleJoin()}
             />
             {error && <p className="text-red text-sm">{error}</p>}
             <button

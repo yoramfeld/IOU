@@ -9,7 +9,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing groupId' }, { status: 400 })
   }
 
-  const data = await sql`SELECT * FROM members WHERE group_id = ${groupId} ORDER BY name`
+  const data = await sql`
+    SELECT id, group_id, name, is_admin, created_at,
+           (password_hash IS NOT NULL) AS has_password
+    FROM members WHERE group_id = ${groupId} ORDER BY name
+  `
 
   return NextResponse.json(data)
 }

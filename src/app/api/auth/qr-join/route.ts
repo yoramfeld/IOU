@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
+import bcrypt from 'bcryptjs'
 
 export async function POST(request: Request) {
-  const { token, memberName, confirmExisting } = await request.json()
+  const { token, memberName, confirmExisting, password } = await request.json()
 
   if (!token || !memberName?.trim()) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
@@ -26,16 +27,19 @@ export async function POST(request: Request) {
 
   // Check if name already exists in this group
   const existingRows = await sql`
-    SELECT id, is_admin FROM members
+    SELECT id, is_admin, password_hash FROM members
     WHERE group_id = ${group.id} AND name ILIKE ${memberName.trim()}
     LIMIT 1
   `
   const existing = existingRows[0]
 
   if (!existing) {
-    // New member — insert and return direct login
+    // New member — insert with optional password, return direct login (QR implies approval)
+    const hash = password?.trim() ? await bcrypt.hash(password.trim(), 10) : null
     const memberRows = await sql`
-      INSERT INTO members (group_id, name) VALUES (${group.id}, ${memberName.trim()}) RETURNING id
+      INSERT INTO members (group_id, name, password_hash)
+      VALUES (${group.id}, ${memberName.trim()}, ${hash})
+      RETURNING id
     `
     const member = memberRows[0]
 
@@ -55,7 +59,35 @@ export async function POST(request: Request) {
     })
   }
 
-  // Name found — returning member
+  // Returning member — try password-based direct login
+  if (password?.trim()) {
+    let match = false
+
+    if (existing.password_hash) {
+      match = await bcrypt.compare(password.trim(), existing.password_hash)
+    }
+
+    if (!match && existing.is_admin) {
+      const groupRows = await sql`SELECT admin_password_hash FROM groups WHERE id = ${group.id}`
+      const groupHash = groupRows[0]?.admin_password_hash
+      if (groupHash) match = await bcrypt.compare(password.trim(), groupHash)
+    }
+
+    if (match) {
+      return NextResponse.json({
+        directLogin: true,
+        memberId: existing.id,
+        memberName: memberName.trim(),
+        groupId: group.id,
+        groupName: group.name,
+        groupCode: group.code,
+        currency: group.currency,
+        isAdmin: existing.is_admin,
+      })
+    }
+  }
+
+  // Name found — returning member, no valid password
   if (!confirmExisting) {
     return NextResponse.json({
       nameCollision: true,
@@ -68,7 +100,6 @@ export async function POST(request: Request) {
   const memberId = existing.id
   const code = String(Math.floor(100 + Math.random() * 900))
 
-  // Remove stale pending verifications for this member
   await sql`DELETE FROM pending_verifications WHERE member_id = ${memberId}`
 
   const pendingRows = await sql`
