@@ -36,28 +36,20 @@ export default function GroupHub() {
 
         <div className="space-y-2 mb-6">
           {sessions.map(s => (
-            <div
-              key={s.groupId}
-              className="flex items-center justify-between border border-border rounded-xl px-4 py-3"
-            >
-              <div className="min-w-0 mr-3">
-                <p className="font-semibold text-sm truncate">{s.groupName}</p>
+            <div key={s.groupId} className="relative">
+              <button
+                onClick={() => handleEnter(s.groupId)}
+                className="w-full text-left border-2 border-green-500 rounded-xl px-4 py-3 hover:bg-green-50 transition-colors"
+              >
+                <p className="font-semibold text-sm pr-12 truncate">{s.groupName}</p>
                 <p className="text-xs text-ink-muted truncate">{s.name}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => handleLeave(s.groupId)}
-                  className="text-xs text-ink-muted hover:text-red transition-colors"
-                >
-                  Leave
-                </button>
-                <button
-                  onClick={() => handleEnter(s.groupId)}
-                  className="btn btn-primary text-xs px-3 py-1.5 h-auto min-h-0"
-                >
-                  Enter
-                </button>
-              </div>
+              </button>
+              <button
+                onClick={() => handleLeave(s.groupId)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-red border border-red rounded px-2 py-0.5 hover:bg-red hover:text-white transition-colors"
+              >
+                Leave
+              </button>
             </div>
           ))}
         </div>
