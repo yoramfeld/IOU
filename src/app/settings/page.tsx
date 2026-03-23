@@ -125,14 +125,69 @@ export default function SettingsPage() {
           } catch { /* ignore malformed */ }
         }
       }
-      setTestSteps([])
       setTestState('done')
       if (dismissTimer.current) clearTimeout(dismissTimer.current)
-      dismissTimer.current = setTimeout(() => { setTestState('idle'); setTestResult(null) }, 45000)
+      dismissTimer.current = setTimeout(() => { setTestState('idle'); setTestResult(null); setTestSteps([]) }, 45000)
     } catch {
       setTestState('idle')
       alert('Test failed to run')
     }
+  }
+
+  function buildReportText() {
+    const now = new Date().toLocaleString()
+    const lines: string[] = [
+      `IOU Balance Test Report`,
+      `Generated: ${now}`,
+      ``,
+    ]
+    for (const s of testSteps) lines.push(s.text)
+    if (testResult) {
+      lines.push(``, `── Summary ──`)
+      const total = testResult.passed + testResult.failed
+      lines.push(testResult.failed === 0
+        ? `PASSED — ${testResult.passed}/${total} checks`
+        : `FAILED — ${testResult.failed} of ${total} checks failed`)
+      for (const s of testResult.scenarios) {
+        const t = s.passed + s.failed
+        lines.push(`  ${s.failed === 0 ? '✓' : '✗'} ${s.name}: ${s.passed}/${t}`)
+        for (const c of s.failedChecks) lines.push(`      ${c.label}: expected ${c.expected}, got ${c.actual}`)
+      }
+    }
+    return lines.join('\n')
+  }
+
+  function clearReport() {
+    if (dismissTimer.current) clearTimeout(dismissTimer.current)
+    setTestState('idle')
+    setTestResult(null)
+    setTestSteps([])
+  }
+
+  async function handleDownloadReport() {
+    const content = buildReportText()
+    const name = `iou-test-report-${new Date().toISOString().slice(0, 10)}.txt`
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ('showSaveFilePicker' in window) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: name,
+          types: [{ description: 'Text file', accept: { 'text/plain': ['.txt'] } }],
+        })
+        const writable = await handle.createWritable()
+        await writable.write(content)
+        await writable.close()
+      } else {
+        const url = URL.createObjectURL(new Blob([content], { type: 'text/plain' }))
+        const a = document.createElement('a')
+        a.href = url
+        a.download = name
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    } catch { /* AbortError = user cancelled — still clear */ }
+    clearReport()
   }
 
   async function handleClearPending() {
@@ -208,6 +263,16 @@ export default function SettingsPage() {
                 </div>
               ))}
               <div ref={logEndRef} />
+            </div>
+          )}
+          {testState === 'done' && (
+            <div className="flex gap-2">
+              <button onClick={handleDownloadReport} className="btn btn-outline text-xs py-1">
+                Download report
+              </button>
+              <button onClick={clearReport} className="btn btn-outline text-xs py-1 text-ink-muted">
+                Dismiss
+              </button>
             </div>
           )}
           {testState === 'done' && testResult && (
