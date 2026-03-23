@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
 import { useAdminMode } from '@/hooks/useAdminMode'
@@ -57,7 +58,7 @@ export default function BoardPage() {
           <div>
             <h1 className="font-bold text-lg">Balance Board</h1>
             <p className="text-xs text-ink-muted">
-              {session.name}
+              {session.name} · <Link href="/" className="hover:text-accent transition-colors">{session.groupName}</Link>
             </p>
           </div>
         </div>

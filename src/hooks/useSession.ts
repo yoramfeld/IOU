@@ -1,7 +1,14 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getSession, setSession, clearSession } from '@/lib/session'
+import {
+  getSession,
+  getSessions,
+  addOrUpdateSession,
+  setActiveGroup,
+  removeSession,
+  clearSession,
+} from '@/lib/session'
 import type { MemberSession, NameCollisionData } from '@/types'
 
 export type { NameCollisionData }
@@ -19,16 +26,25 @@ export interface VerificationData {
 
 export function useSession() {
   const [session, setSessionState] = useState<MemberSession | null>(null)
+  const [sessions, setSessionsState] = useState<MemberSession[]>([])
   const [loading, setLoading] = useState(true)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     setSessionState(getSession())
+    setSessionsState(getSessions())
     setLoading(false)
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [])
+
+  // Upsert a session and update both state values
+  function applySession(s: MemberSession) {
+    addOrUpdateSession(s)
+    setSessionState(s)
+    setSessionsState(getSessions())
+  }
 
   async function createGroup(groupName: string, currency: string, memberName: string, adminPassword?: string): Promise<MemberSession | null> {
     const res = await fetch('/api/auth/create-group', {
@@ -48,8 +64,7 @@ export function useSession() {
       name: data.name,
       isAdmin: true,
     }
-    setSession(s)
-    setSessionState(s)
+    applySession(s)
     return s
   }
 
@@ -83,8 +98,7 @@ export function useSession() {
         name: data.memberName,
         isAdmin: data.isAdmin,
       }
-      setSession(s)
-      setSessionState(s)
+      applySession(s)
       return { ok: true }
     }
 
@@ -113,8 +127,7 @@ export function useSession() {
       name: data.name,
       isAdmin: data.isAdmin,
     }
-    setSession(s)
-    setSessionState(s)
+    applySession(s)
     return { ok: true }
   }
 
@@ -143,27 +156,40 @@ export function useSession() {
             name: data.name,
             isAdmin: data.isAdmin,
           }
-          setSession(s)
-          setSessionState(s)
+          applySession(s)
           resolve(s)
         } catch {
           // network error, keep polling
         }
       }, 3000)
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function updateSession(updates: Partial<MemberSession>) {
     if (!session) return
     const updated = { ...session, ...updates }
-    setSession(updated)
-    setSessionState(updated)
+    applySession(updated)
   }
 
-  function logout() {
-    clearSession()
-    setSessionState(null)
+  function switchGroup(groupId: string) {
+    setActiveGroup(groupId)
+    const s = getSessions().find(g => g.groupId === groupId) ?? null
+    setSessionState(s)
   }
 
-  return { session, loading, createGroup, joinGroup, claimSession, updateSession, logout }
+  function logout(groupId?: string) {
+    if (groupId) {
+      removeSession(groupId)
+      const remaining = getSessions()
+      setSessionsState(remaining)
+      setSessionState(remaining.length > 0 ? getSession() : null)
+    } else {
+      clearSession()
+      setSessionState(null)
+      setSessionsState([])
+    }
+  }
+
+  return { session, sessions, loading, createGroup, joinGroup, claimSession, updateSession, switchGroup, logout }
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
 import BottomNav from '@/components/ui/BottomNav'
@@ -217,7 +218,7 @@ export default function SettingsPage() {
         <div>
           <h1 className="font-bold text-lg">Settings</h1>
           <p className="text-xs text-ink-muted">
-            {session.name}
+            {session.name} · <Link href="/" className="hover:text-accent transition-colors">{session.groupName}</Link>
           </p>
         </div>
       </header>

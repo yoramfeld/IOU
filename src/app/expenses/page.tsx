@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
 import { useAdminMode } from '@/hooks/useAdminMode'
@@ -111,7 +112,9 @@ export default function ExpensesPage() {
       <header className="sticky top-0 bg-white/80 backdrop-blur-sm border-b border-border z-10 px-4 py-3">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-bold text-lg">{session.groupName}</h1>
+            <Link href="/" className="font-bold text-lg hover:text-accent transition-colors">
+              {session.groupName}
+            </Link>
             <p className="text-xs text-ink-muted">
               {session.name}
             </p>

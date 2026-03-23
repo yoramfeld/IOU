@@ -1,24 +1,22 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { getSession } from '@/lib/session'
+import { getSessions } from '@/lib/session'
 import SignupGate from '@/components/auth/SignupGate'
+import GroupHub from '@/components/auth/GroupHub'
 
 export default function HomePage() {
-  const router = useRouter()
   const [ready, setReady] = useState(false)
+  const [hasGroups, setHasGroups] = useState(false)
 
   useEffect(() => {
-    const session = getSession()
-    if (session) {
-      router.replace('/expenses')
-    } else {
-      setReady(true)
-    }
-  }, [router])
+    setHasGroups(getSessions().length > 0)
+    setReady(true)
+  }, [])
 
   if (!ready) return null
+
+  if (hasGroups) return <GroupHub />
 
   return <SignupGate />
 }

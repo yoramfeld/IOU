@@ -17,10 +17,15 @@ const CURRENCIES = [
 
 type Step = 'choose' | 'create' | 'join' | 'show-code' | 'verify-wait' | 'name-collision'
 
-export default function SignupGate() {
+interface Props {
+  initialStep?: Step
+  onBack?: () => void
+}
+
+export default function SignupGate({ initialStep, onBack }: Props = {}) {
   const router = useRouter()
   const { createGroup, joinGroup, claimSession } = useSession()
-  const [step, setStep] = useState<Step>('choose')
+  const [step, setStep] = useState<Step>(initialStep ?? 'choose')
   const [groupName, setGroupName] = useState('')
   const [currency, setCurrency] = useState('€')
   const [memberName, setMemberName] = useState('')
@@ -153,7 +158,7 @@ export default function SignupGate() {
             >
               {submitting ? 'Creating...' : 'Create'}
             </button>
-            <button onClick={() => { setStep('choose'); setError('') }} className="btn btn-outline">
+            <button onClick={() => { onBack ? onBack() : setStep('choose'); setError('') }} className="btn btn-outline">
               Back
             </button>
           </div>
@@ -213,7 +218,7 @@ export default function SignupGate() {
             >
               {submitting ? 'Joining...' : 'Join'}
             </button>
-            <button onClick={() => { setStep('choose'); setError('') }} className="btn btn-outline">
+            <button onClick={() => { onBack ? onBack() : setStep('choose'); setError('') }} className="btn btn-outline">
               Back
             </button>
           </div>
