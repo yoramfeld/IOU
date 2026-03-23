@@ -1,14 +1,24 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
 import BottomNav from '@/components/ui/BottomNav'
 import GroupSettings from '@/components/settings/GroupSettings'
 
+type TestResult = {
+  passed: number
+  failed: number
+  balanceChecks: { member: string; expected: number; actual: number; pass: boolean }[]
+  settlementChecks: { from: string; to: string; expected: number; actual: number | null; pass: boolean }[]
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const { session, loading, logout, updateSession } = useSession()
+  const [testState, setTestState] = useState<'idle' | 'running' | 'done'>('idle')
+  const [testResult, setTestResult] = useState<TestResult | null>(null)
+  const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!loading && !session) {
@@ -77,6 +87,23 @@ export default function SettingsPage() {
     window.location.href = '/board'
   }
 
+  async function handleRunTest() {
+    if (!session) return
+    setTestState('running')
+    setTestResult(null)
+    try {
+      const res = await fetch(`/api/test-balances?adminId=${session.memberId}`)
+      const data: TestResult = await res.json()
+      setTestResult(data)
+      setTestState('done')
+      if (dismissTimer.current) clearTimeout(dismissTimer.current)
+      dismissTimer.current = setTimeout(() => setTestState('idle'), 8000)
+    } catch {
+      setTestState('idle')
+      alert('Test failed to run')
+    }
+  }
+
   async function handleClearPending() {
     if (!session) return
     if (!confirm('Clear all pending join requests? Users waiting for approval will need to try again.')) return
@@ -121,6 +148,42 @@ export default function SettingsPage() {
               Clear pending requests
             </button>
           </div>
+        </div>
+
+        <div className="mt-8 pt-6 border-t border-border space-y-3">
+          <h2 className="text-sm font-semibold text-ink-soft mb-1">Developer tools</h2>
+          <p className="text-xs text-ink-muted">
+            Runs a 7-member test scenario, verifies balances and settlements, then cleans up.
+          </p>
+          <button
+            onClick={handleRunTest}
+            disabled={testState === 'running'}
+            className="btn btn-outline"
+          >
+            {testState === 'running' ? 'Running test…' : 'Run balance test'}
+          </button>
+          {testState === 'done' && testResult && (
+            <div className={`rounded-lg p-3 text-sm ${testResult.failed === 0 ? 'bg-green/10 text-green' : 'bg-red/10 text-red'}`}>
+              <p className="font-semibold mb-1">
+                {testResult.failed === 0
+                  ? `✓ All ${testResult.passed} checks passed`
+                  : `✗ ${testResult.failed} of ${testResult.passed + testResult.failed} checks failed`}
+              </p>
+              {testResult.failed > 0 && (
+                <ul className="text-xs space-y-0.5">
+                  {[...testResult.balanceChecks, ...testResult.settlementChecks]
+                    .filter(c => !c.pass)
+                    .map((c, i) => (
+                      <li key={i}>
+                        {'member' in c
+                          ? `Balance ${c.member}: expected ${c.expected}, got ${c.actual}`
+                          : `Settlement ${c.from}→${c.to}: expected ${c.expected}, got ${c.actual}`}
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="mt-8 pt-6 border-t border-border">
