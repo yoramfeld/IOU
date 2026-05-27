@@ -1,11 +1,13 @@
 'use client'
 
-import type { MemberBalance } from '@/types'
+import { useState, useMemo } from 'react'
+import type { MemberBalance, Expense, ExpenseSplit, ExpensePayer } from '@/types'
 import MemberAvatar from '@/components/ui/MemberAvatar'
 import clsx from 'clsx'
 
 interface Props {
   balances: MemberBalance[]
+  expenses?: (Expense & { splits: ExpenseSplit[]; payers: ExpensePayer[] })[]
   currency: string
   currentMemberId: string
   isAdmin?: boolean
@@ -13,7 +15,8 @@ interface Props {
   onRemoveMember?: (id: string) => void
 }
 
-export default function BalanceBoard({ balances, currency, currentMemberId, isAdmin, onRenameMember, onRemoveMember }: Props) {
+export default function BalanceBoard({ balances, expenses, currency, currentMemberId, isAdmin, onRenameMember, onRemoveMember }: Props) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   if (balances.length === 0) {
     return (
       <div className="text-center py-12 text-ink-muted">
@@ -47,61 +50,123 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
         const isMe = b.id === currentMemberId
         const isTopDebtor = minBalKey !== null && bal.toFixed(2) === minBalKey
 
+        const isExpanded = expandedId === b.id
+
+        // Build transaction list for this member when expanded
+        const transactions = isExpanded && expenses ? (() => {
+          const txns: { date: string; description: string; amount: number; type: 'paid' | 'owed' }[] = []
+          // Iterate chronologically (expenses are DESC, so reverse)
+          const chrono = [...expenses].reverse()
+          for (const exp of chrono) {
+            const effectivePayers = exp.payers?.length ? exp.payers : [{ member_id: exp.paid_by, amount: exp.amount }]
+            const payer = effectivePayers.find(p => p.member_id === b.id)
+            if (payer) {
+              txns.push({
+                date: exp.created_at,
+                description: exp.description,
+                amount: Number(payer.amount),
+                type: 'paid',
+              })
+            }
+            const split = exp.splits.find(s => s.member_id === b.id)
+            if (split) {
+              txns.push({
+                date: exp.created_at,
+                description: exp.description,
+                amount: Math.abs(Number(split.amount)),
+                type: 'owed',
+              })
+            }
+          }
+          return txns
+        })() : []
+
         return (
           <div key={b.id} className={clsx(
-            'card flex items-center gap-3',
+            'card',
             isMe && 'ring-2 ring-accent/20',
             isPositive && 'bg-green/5',
             isTopDebtor && 'bg-red/5 ring-1 ring-red/20',
           )}>
-            <MemberAvatar name={b.name} />
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm truncate">
-                {b.name}
-                {isMe && <span className="text-xs text-ink-muted ml-1">(you)</span>}
-                {b.is_admin && <span className="text-xs text-amber-600 ml-1">admin</span>}
-                {isAdmin && onRenameMember && (
+            <div
+              className="flex items-center gap-3 cursor-pointer"
+              onClick={() => setExpandedId(isExpanded ? null : b.id)}
+            >
+              <MemberAvatar name={b.name} />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm truncate">
+                  {b.name}
+                  {isMe && <span className="text-xs text-ink-muted ml-1">(you)</span>}
+                  {b.is_admin && <span className="text-xs text-amber-600 ml-1">admin</span>}
+                  {isAdmin && onRenameMember && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const newName = prompt('New name:', b.name)
+                        if (newName && newName.trim() && newName.trim() !== b.name) {
+                          onRenameMember(b.id, newName.trim())
+                        }
+                      }}
+                      className="ml-1 text-ink-muted hover:text-accent inline-block align-middle"
+                      title="Rename member"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                        <path d="m15 5 4 4"/>
+                      </svg>
+                    </button>
+                  )}
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className={clsx(
+                  'font-bold text-sm',
+                  isPositive && 'text-green',
+                  isNegative && 'text-red',
+                  !isPositive && !isNegative && 'text-ink-muted'
+                )}>
+                  {isPositive ? '+' : ''}{currency}{bal.toFixed(2)}
+                </p>
+                {b.total_paid > 0 && (
+                  <p className="text-xs text-ink-muted">
+                    paid {currency}{Number(b.total_paid).toFixed(2)}
+                  </p>
+                )}
+                {isAdmin && onRemoveMember && b.id !== currentMemberId && (
                   <button
-                    onClick={() => {
-                      const newName = prompt('New name:', b.name)
-                      if (newName && newName.trim() && newName.trim() !== b.name) {
-                        onRenameMember(b.id, newName.trim())
-                      }
-                    }}
-                    className="ml-1 text-ink-muted hover:text-accent inline-block align-middle"
-                    title="Rename member"
+                    onClick={(e) => { e.stopPropagation(); onRemoveMember(b.id) }}
+                    className="text-xs text-red hover:underline mt-1"
                   >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-                      <path d="m15 5 4 4"/>
-                    </svg>
+                    Remove
                   </button>
                 )}
-              </p>
+              </div>
             </div>
-            <div className="text-right shrink-0">
-              <p className={clsx(
-                'font-bold text-sm',
-                isPositive && 'text-green',
-                isNegative && 'text-red',
-                !isPositive && !isNegative && 'text-ink-muted'
-              )}>
-                {isPositive ? '+' : ''}{currency}{bal.toFixed(2)}
-              </p>
-              {b.total_paid > 0 && (
-                <p className="text-xs text-ink-muted">
-                  paid {currency}{Number(b.total_paid).toFixed(2)}
-                </p>
-              )}
-              {isAdmin && onRemoveMember && b.id !== currentMemberId && (
-                <button
-                  onClick={() => onRemoveMember(b.id)}
-                  className="text-xs text-red hover:underline mt-1"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
+            {isExpanded && transactions.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-border space-y-1">
+                {transactions.map((txn, i) => {
+                  const dt = new Date(txn.date)
+                  const dateStr = `${dt.getDate()}/${dt.getMonth() + 1}`
+                  return (
+                    <div key={i} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-ink-muted w-10 shrink-0">{dateStr}</span>
+                        <span className="truncate">{txn.description}</span>
+                      </div>
+                      <span className={clsx(
+                        'shrink-0 ml-2 font-medium',
+                        txn.type === 'paid' ? 'text-green' : 'text-red'
+                      )}>
+                        {txn.type === 'paid' ? '+' : '-'}{currency}{txn.amount.toFixed(2)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {isExpanded && transactions.length === 0 && (
+              <p className="mt-2 pt-2 border-t border-border text-xs text-ink-muted">No transactions</p>
+            )}
           </div>
         )
       })}

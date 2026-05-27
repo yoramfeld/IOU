@@ -8,13 +8,14 @@ import { useAdminMode } from '@/hooks/useAdminMode'
 import BottomNav from '@/components/ui/BottomNav'
 import AdminModeToggle from '@/components/ui/AdminModeToggle'
 import BalanceBoard from '@/components/board/BalanceBoard'
-import type { MemberBalance } from '@/types'
+import type { MemberBalance, Expense, ExpenseSplit, ExpensePayer } from '@/types'
 
 export default function BoardPage() {
   const router = useRouter()
   const { session, loading, logout } = useSession()
   const { adminMode, setAdminMode, loaded: adminLoaded } = useAdminMode()
   const [balances, setBalances] = useState<MemberBalance[]>([])
+  const [expenses, setExpenses] = useState<(Expense & { splits: ExpenseSplit[]; payers: ExpensePayer[] })[]>([])
   const [loadingData, setLoadingData] = useState(true)
   const [repairing, setRepairing] = useState(false)
   const [repairResult, setRepairResult] = useState<string | null>(null)
@@ -22,8 +23,13 @@ export default function BoardPage() {
   const fetchBalances = useCallback(async () => {
     if (!session) return
     try {
-      const res = await fetch(`/api/balances?groupId=${session.groupId}&_t=${Date.now()}`)
-      if (res.ok) setBalances(await res.json())
+      const t = Date.now()
+      const [balRes, expRes] = await Promise.all([
+        fetch(`/api/balances?groupId=${session.groupId}&_t=${t}`),
+        fetch(`/api/expenses?groupId=${session.groupId}&_t=${t}`),
+      ])
+      if (balRes.ok) setBalances(await balRes.json())
+      if (expRes.ok) setExpenses(await expRes.json())
     } finally {
       setLoadingData(false)
     }
@@ -125,6 +131,7 @@ export default function BoardPage() {
         ) : (
           <BalanceBoard
             balances={balances}
+            expenses={expenses}
             currency={session.currency}
             currentMemberId={session.memberId}
             isAdmin={session.isAdmin && adminMode}
