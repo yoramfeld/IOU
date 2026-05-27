@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const db = neon(process.env.DATABASE_URL!)
 
   const [members, splits, expensePaidBy] = await Promise.all([
-    db`SELECT id, name, is_admin, group_id FROM members WHERE group_id = ${groupId}`,
+    db`SELECT id, name, is_admin, group_id, starting_balance FROM members WHERE group_id = ${groupId}`,
     db`SELECT es.member_id, es.amount FROM expense_splits es WHERE es.expense_id IN (SELECT id FROM expenses WHERE group_id = ${groupId})`,
     db`SELECT paid_by AS member_id, amount FROM expenses WHERE group_id = ${groupId}`,
   ])
@@ -33,15 +33,21 @@ export async function GET(request: Request) {
     owedByMember[s.member_id] = (owedByMember[s.member_id] || 0) + Number(s.amount)
   }
 
-  const balances = (members as { id: string; name: string; is_admin: boolean; group_id: string }[]).map(m => ({
-    id: m.id,
-    name: m.name,
-    is_admin: m.is_admin,
-    group_id: m.group_id,
-    total_paid: paidByMember[m.id] || 0,
-    total_owed: owedByMember[m.id] || 0,
-    balance: (paidByMember[m.id] || 0) + (owedByMember[m.id] || 0),
-  }))
+  const balances = (members as { id: string; name: string; is_admin: boolean; group_id: string; starting_balance: string | number }[]).map(m => {
+    const startBal = Number(m.starting_balance || 0)
+    const paid = paidByMember[m.id] || 0
+    const owed = owedByMember[m.id] || 0
+    return {
+      id: m.id,
+      name: m.name,
+      is_admin: m.is_admin,
+      group_id: m.group_id,
+      starting_balance: startBal,
+      total_paid: paid,
+      total_owed: owed,
+      balance: startBal + paid + owed,
+    }
+  })
 
   balances.sort((a, b) => a.balance - b.balance)
 

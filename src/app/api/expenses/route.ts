@@ -99,13 +99,17 @@ export async function POST(request: Request) {
     // Determine which members absorb the remainder cents.
     const remainderSet = new Set<string>()
     if (remainder > 0) {
-      const [groupPayers, groupSplits] = await Promise.all([
+      const [groupPayers, groupSplits, groupMembers] = await Promise.all([
         sql`SELECT ep.member_id, ep.amount FROM expense_payers ep JOIN expenses e ON e.id = ep.expense_id WHERE e.group_id = ${groupId}`,
         sql`SELECT es.member_id, es.amount FROM expense_splits es JOIN expenses e ON e.id = es.expense_id WHERE e.group_id = ${groupId}`,
+        sql`SELECT id, starting_balance FROM members WHERE group_id = ${groupId}`,
       ])
 
+      const startBals: Record<string, number> = {}
+      for (const m of groupMembers) startBals[m.id] = Number(m.starting_balance || 0)
+
       const bal: Record<string, number> = {}
-      for (const id of splitAmong) bal[id] = 0
+      for (const id of splitAmong) bal[id] = startBals[id] || 0
       for (const p of groupPayers) {
         if (p.member_id in bal) bal[p.member_id] += Number(p.amount)
       }

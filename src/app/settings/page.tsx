@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
 import BottomNav from '@/components/ui/BottomNav'
 import GroupSettings from '@/components/settings/GroupSettings'
+import StartingBalances from '@/components/settings/StartingBalances'
 
 type StepLine = { text: string; status: 'info' | 'ok' | 'fail' }
 type TestResult = {
@@ -261,6 +262,8 @@ export default function SettingsPage() {
         </div>
 
         {session.isAdmin && <GroupSettings session={session} onUpdate={handleUpdate} />}
+
+        {session.isAdmin && <StartingBalances session={session} />}
 
         {session.isAdmin && <div className="mt-8 pt-6 border-t border-border space-y-4">
           <div>

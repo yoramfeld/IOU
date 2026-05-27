@@ -20,12 +20,14 @@ export async function PATCH(request: Request) {
 
   // If changing currency, check all balances are zero
   if (currency) {
-    const [payers, splits] = await Promise.all([
+    const [payers, splits, membersWithStart] = await Promise.all([
       sql`SELECT ep.member_id, ep.amount FROM expense_payers ep JOIN expenses e ON e.id = ep.expense_id WHERE e.group_id = ${groupId}`,
       sql`SELECT es.member_id, es.amount FROM expense_splits es JOIN expenses e ON e.id = es.expense_id WHERE e.group_id = ${groupId}`,
+      sql`SELECT id, starting_balance FROM members WHERE group_id = ${groupId}`,
     ])
 
     const bal: Record<string, number> = {}
+    for (const m of membersWithStart) bal[m.id] = Number(m.starting_balance || 0)
     for (const p of payers) bal[p.member_id] = (bal[p.member_id] || 0) + Number(p.amount)
     for (const s of splits) bal[s.member_id] = (bal[s.member_id] || 0) + Number(s.amount)
 

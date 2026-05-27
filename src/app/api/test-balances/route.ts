@@ -213,6 +213,7 @@ async function runScenario(
 
     const balances: MemberBalance[] = (members as any[]).map((m: any) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
       id: m.id, name: m.name, is_admin: false, group_id: groupId!,
+      starting_balance: 0,
       total_paid:  paidBy[m.id] || 0,
       total_owed:  owedBy[m.id] || 0,
       balance:    (paidBy[m.id] || 0) + (owedBy[m.id] || 0),

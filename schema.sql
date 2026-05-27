@@ -17,8 +17,9 @@ create table members (
   group_id      uuid not null references groups(id) on delete cascade,
   name          text not null,
   is_admin      boolean not null default false,
-  password_hash text,
-  created_at    timestamptz not null default now()
+  password_hash    text,
+  starting_balance numeric(10,2) not null default 0,
+  created_at       timestamptz not null default now()
 );
 create unique index members_name_group_unique on members (group_id, lower(name));
 
@@ -54,10 +55,11 @@ create table expense_splits (
 -- Balance view
 create view member_balances as
 select
-  m.id, m.name, m.is_admin, m.group_id,
+  m.id, m.name, m.is_admin, m.group_id, m.starting_balance,
   coalesce((select sum(e.amount) from expenses e where e.paid_by = m.id), 0) as total_paid,
   coalesce((select sum(es.amount) from expense_splits es where es.member_id = m.id), 0) as total_owed,
-  coalesce((select sum(e.amount) from expenses e where e.paid_by = m.id), 0)
+  m.starting_balance
+    + coalesce((select sum(e.amount) from expenses e where e.paid_by = m.id), 0)
     + coalesce((select sum(es.amount) from expense_splits es where es.member_id = m.id), 0) as balance
 from members m;
 
