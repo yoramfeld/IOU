@@ -20,6 +20,7 @@ export default function ExpensesPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [showModal, setShowModal] = useState(false)
   const [showQRModal, setShowQRModal] = useState(false)
+  const [editingExpense, setEditingExpense] = useState<(Expense & { splits: ExpenseSplit[]; payers?: ExpensePayer[] }) | null>(null)
   const [loadingData, setLoadingData] = useState(true)
 
   const fetchData = useCallback(async () => {
@@ -75,7 +76,31 @@ export default function ExpensesPage() {
     await fetchData()
   }
 
-  // Compute current total balance per member across all expenses
+  async function handleEditExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[] }) {
+    if (!session || !editingExpense) return
+    const res = await fetch('/api/expenses', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expenseId: editingExpense.id,
+        adminId: session.memberId,
+        description: data.description,
+        amount: data.amount,
+        payers: data.payers,
+        splitAmong: data.splitAmong,
+        customSplits: data.customSplits,
+      }),
+    })
+    if (!res.ok) throw new Error('Failed')
+    await fetchData()
+  }
+
+  function startEditExpense(expense: Expense & { splits: ExpenseSplit[]; payers?: ExpensePayer[] }) {
+    setEditingExpense(expense)
+    setShowModal(true)
+  }
+
+  // Compute running balance per member: each card shows the payer's balance *after* that expense
   const { payerBalances, memberBalances } = useMemo(() => {
     const balances: Record<string, number> = {}
 
@@ -85,7 +110,11 @@ export default function ExpensesPage() {
       if (sb) balances[m.id] = sb
     }
 
-    for (const exp of expenses) {
+    // Expenses are ordered DESC (newest first) — iterate in chronological order (reversed)
+    const chronological = [...expenses].reverse()
+
+    const map: Record<string, Record<string, number>> = {}
+    for (const exp of chronological) {
       const effectivePayers = exp.payers?.length ? exp.payers : [{ member_id: exp.paid_by, amount: exp.amount }]
       for (const p of effectivePayers) {
         balances[p.member_id] = (balances[p.member_id] || 0) + Number(p.amount)
@@ -93,17 +122,15 @@ export default function ExpensesPage() {
       for (const s of exp.splits) {
         balances[s.member_id] = (balances[s.member_id] || 0) + Number(s.amount)
       }
-    }
 
-    // Each expense card shows the payer's current total balance
-    const map: Record<string, Record<string, number>> = {}
-    for (const exp of expenses) {
-      const payerIds = exp.payers?.length ? exp.payers.map(p => p.member_id) : [exp.paid_by]
+      // Snapshot payer balances after this expense
+      const payerIds = effectivePayers.map(p => p.member_id)
       map[exp.id] = {}
       for (const id of payerIds) {
         map[exp.id][id] = Math.round((balances[id] || 0) * 100) / 100
       }
     }
+
     return { payerBalances: map, memberBalances: { ...balances } }
   }, [expenses, members])
 
@@ -165,6 +192,7 @@ export default function ExpensesPage() {
             members={members}
             currency={session.currency}
             isAdmin={session.isAdmin && adminMode}
+            onEdit={session.isAdmin && adminMode ? startEditExpense : undefined}
             onDelete={handleDelete}
             payerBalances={payerBalances}
           />
@@ -186,8 +214,14 @@ export default function ExpensesPage() {
           isAdmin={session.isAdmin && adminMode}
           currency={session.currency}
           memberBalances={memberBalances}
-          onSubmit={handleAddExpense}
-          onClose={() => setShowModal(false)}
+          editExpense={editingExpense ? {
+            description: editingExpense.description,
+            amount: Number(editingExpense.amount),
+            payers: (editingExpense.payers ?? []).map(p => ({ memberId: p.member_id, amount: Number(p.amount) })),
+            splits: editingExpense.splits.map(s => ({ memberId: s.member_id, amount: Number(s.amount) })),
+          } : undefined}
+          onSubmit={editingExpense ? handleEditExpense : handleAddExpense}
+          onClose={() => { setShowModal(false); setEditingExpense(null) }}
         />
       )}
 

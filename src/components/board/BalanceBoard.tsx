@@ -9,10 +9,11 @@ interface Props {
   currency: string
   currentMemberId: string
   isAdmin?: boolean
+  onRenameMember?: (id: string, newName: string) => void
   onRemoveMember?: (id: string) => void
 }
 
-export default function BalanceBoard({ balances, currency, currentMemberId, isAdmin, onRemoveMember }: Props) {
+export default function BalanceBoard({ balances, currency, currentMemberId, isAdmin, onRenameMember, onRemoveMember }: Props) {
   if (balances.length === 0) {
     return (
       <div className="text-center py-12 text-ink-muted">
@@ -34,6 +35,8 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
   const minCount = minBalKey
     ? sorted.filter(b => Number(b.balance).toFixed(2) === minBalKey).length
     : 0
+
+  const total = Math.round(balances.reduce((s, b) => s + Number(b.balance), 0) * 100) / 100
 
   return (
     <div className="space-y-2">
@@ -57,6 +60,23 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
                 {b.name}
                 {isMe && <span className="text-xs text-ink-muted ml-1">(you)</span>}
                 {b.is_admin && <span className="text-xs text-amber-600 ml-1">admin</span>}
+                {isAdmin && onRenameMember && (
+                  <button
+                    onClick={() => {
+                      const newName = prompt('New name:', b.name)
+                      if (newName && newName.trim() && newName.trim() !== b.name) {
+                        onRenameMember(b.id, newName.trim())
+                      }
+                    }}
+                    className="ml-1 text-ink-muted hover:text-accent inline-block align-middle"
+                    title="Rename member"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                      <path d="m15 5 4 4"/>
+                    </svg>
+                  </button>
+                )}
               </p>
             </div>
             <div className="text-right shrink-0">
@@ -85,6 +105,9 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
           </div>
         )
       })}
+      <div className="text-center text-xs text-ink-muted pt-2">
+        Total: {currency}{total.toFixed(2)}
+      </div>
     </div>
   )
 }

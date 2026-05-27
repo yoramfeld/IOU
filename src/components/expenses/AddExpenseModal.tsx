@@ -3,12 +3,20 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Member } from '@/types'
 
+interface EditExpenseData {
+  description: string
+  amount: number
+  payers: { memberId: string; amount: number }[]
+  splits: { memberId: string; amount: number }[]
+}
+
 interface Props {
   members: Member[]
   currentMemberId: string
   isAdmin: boolean
   currency: string
   memberBalances?: Record<string, number>
+  editExpense?: EditExpenseData
   onSubmit: (data: {
     paidBy: string
     amount: number
@@ -26,25 +34,44 @@ function readSavedTip(): number {
   try { return parseInt(localStorage.getItem('iou_tip_pct') || '0', 10) || 0 } catch { return 0 }
 }
 
-export default function AddExpenseModal({ members, currentMemberId, isAdmin, currency, memberBalances, onSubmit, onClose }: Props) {
+export default function AddExpenseModal({ members, currentMemberId, isAdmin, currency, memberBalances, editExpense, onSubmit, onClose }: Props) {
   // Sort by biggest debt first (most negative balance), randomize ties — fixed on open
   const [sortedMembers] = useState<Member[]>(() => {
     const shuffled = [...members].sort(() => Math.random() - 0.5)
     return shuffled.sort((a, b) => (memberBalances?.[a.id] ?? 0) - (memberBalances?.[b.id] ?? 0))
   })
 
-  const [description, setDescription] = useState('')
-  const [amount, setAmount] = useState('')
-  const [tipPct, setTipPct] = useState(readSavedTip)
-  const [roundUp, setRoundUp] = useState(true)
-  const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({})
-  const [tipIncAmounts, setTipIncAmounts] = useState<Record<string, string>>({})
-  const [paidAmounts, setPaidAmounts] = useState<Record<string, string>>({})
+  const [description, setDescription] = useState(editExpense?.description ?? '')
+  const [amount, setAmount] = useState(editExpense ? String(editExpense.amount) : '')
+  const [tipPct, setTipPct] = useState(editExpense ? 0 : readSavedTip)
+  const [roundUp, setRoundUp] = useState(editExpense ? false : true)
+  const [customAmounts, setCustomAmounts] = useState<Record<string, string>>(() => {
+    if (!editExpense) return {}
+    const amounts: Record<string, string> = {}
+    for (const s of editExpense.splits) amounts[s.memberId] = String(Math.abs(s.amount))
+    return amounts
+  })
+  const [tipIncAmounts, setTipIncAmounts] = useState<Record<string, string>>(() => {
+    if (!editExpense) return {}
+    const amounts: Record<string, string> = {}
+    for (const s of editExpense.splits) amounts[s.memberId] = String(Math.abs(s.amount))
+    return amounts
+  })
+  const [paidAmounts, setPaidAmounts] = useState<Record<string, string>>(() => {
+    if (!editExpense) return {}
+    const amounts: Record<string, string> = {}
+    for (const p of editExpense.payers) amounts[p.memberId] = String(p.amount)
+    return amounts
+  })
   const [calcOpen, setCalcOpen] = useState<string | null>(null)
   const [calcExpr, setCalcExpr] = useState('')
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [excluded, setExcluded] = useState<Set<string>>(new Set())
-  const [isManualSplit, setIsManualSplit] = useState(false)
+  const [excluded, setExcluded] = useState<Set<string>>(() => {
+    if (!editExpense) return new Set()
+    const splitIds = new Set(editExpense.splits.map(s => s.memberId))
+    return new Set(members.filter(m => !splitIds.has(m.id)).map(m => m.id))
+  })
+  const [isManualSplit, setIsManualSplit] = useState(!!editExpense)
   const [focusedOrderedId, setFocusedOrderedId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -233,7 +260,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
       })
       onClose()
     } catch {
-      showError('Failed to add expense')
+      showError(editExpense ? 'Failed to save expense' : 'Failed to add expense')
     }
     setSubmitting(false)
   }
@@ -244,7 +271,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
 
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">Add expense</h2>
+          <h2 className="text-lg font-bold">{editExpense ? 'Edit expense' : 'Add expense'}</h2>
           <button onClick={onClose} className="text-ink-muted text-xl leading-none">&times;</button>
         </div>
 
@@ -483,7 +510,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                 : 'btn-primary'
           }`}
         >
-          {submitting ? 'Submitting...' : 'Submit'}
+          {submitting ? 'Saving...' : editExpense ? 'Save' : 'Submit'}
         </button>
       </div>
     </div>

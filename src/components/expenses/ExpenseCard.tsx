@@ -8,11 +8,12 @@ interface Props {
   members: Member[]
   currency: string
   isAdmin?: boolean
+  onEdit?: (expense: Expense & { splits: ExpenseSplit[]; payers?: ExpensePayer[] }) => void
   onDelete?: (id: string) => void
   payerBalances?: Record<string, number>
 }
 
-export default function ExpenseCard({ expense, members, currency, isAdmin, onDelete, payerBalances }: Props) {
+export default function ExpenseCard({ expense, members, currency, isAdmin, onEdit, onDelete, payerBalances }: Props) {
   const payer = members.find(m => m.id === expense.paid_by)
   const enteredBy = members.find(m => m.id === expense.entered_by)
   const isMultiPayer = (expense.payers?.length ?? 0) > 1
@@ -98,13 +99,25 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
         </div>
         <div className="text-right shrink-0">
           <p className="font-bold text-sm">{currency}{Math.round(Number(expense.amount))}</p>
-          {isAdmin && onDelete && (
-            <button
-              onClick={() => onDelete(expense.id)}
-              className="text-xs text-red hover:underline mt-1"
-            >
-              Delete
-            </button>
+          {isAdmin && (onEdit || onDelete) && (
+            <div className="flex gap-2 mt-1">
+              {onEdit && (
+                <button
+                  onClick={() => onEdit(expense)}
+                  className="text-xs text-accent hover:underline"
+                >
+                  Edit
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  onClick={() => onDelete(expense.id)}
+                  className="text-xs text-red hover:underline"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

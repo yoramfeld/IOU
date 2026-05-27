@@ -63,6 +63,16 @@ export default function BoardPage() {
     }
   }
 
+  async function handleRenameMember(memberId: string, newName: string) {
+    if (!session) return
+    await fetch('/api/members', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberId, adminId: session.memberId, name: newName }),
+    })
+    await fetchBalances()
+  }
+
   async function handleRemoveMember(memberId: string) {
     if (!session || !confirm('Remove this member? Their expenses will also be deleted.')) return
     await fetch('/api/members', {
@@ -118,6 +128,7 @@ export default function BoardPage() {
             currency={session.currency}
             currentMemberId={session.memberId}
             isAdmin={session.isAdmin && adminMode}
+            onRenameMember={session.isAdmin && adminMode ? handleRenameMember : undefined}
             onRemoveMember={handleRemoveMember}
           />
         )}
