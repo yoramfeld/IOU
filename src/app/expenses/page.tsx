@@ -79,6 +79,12 @@ export default function ExpensesPage() {
   const { payerBalances, memberBalances } = useMemo(() => {
     const balances: Record<string, number> = {}
 
+    // Seed with starting balances
+    for (const m of members) {
+      const sb = Number((m as Member & { starting_balance?: number | string }).starting_balance || 0)
+      if (sb) balances[m.id] = sb
+    }
+
     for (const exp of expenses) {
       const effectivePayers = exp.payers?.length ? exp.payers : [{ member_id: exp.paid_by, amount: exp.amount }]
       for (const p of effectivePayers) {
@@ -99,7 +105,7 @@ export default function ExpensesPage() {
       }
     }
     return { payerBalances: map, memberBalances: { ...balances } }
-  }, [expenses])
+  }, [expenses, members])
 
   if (loading || !adminLoaded) {
     return <div className="phone-frame flex items-center justify-center min-h-dvh text-ink-muted">Loading...</div>

@@ -11,7 +11,8 @@ export async function GET(request: Request) {
 
   const data = await sql`
     SELECT id, group_id, name, is_admin, created_at,
-           (password_hash IS NOT NULL) AS has_password
+           (password_hash IS NOT NULL) AS has_password,
+           starting_balance
     FROM members WHERE group_id = ${groupId} ORDER BY name
   `
 

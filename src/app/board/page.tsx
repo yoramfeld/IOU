@@ -16,6 +16,8 @@ export default function BoardPage() {
   const { adminMode, setAdminMode, loaded: adminLoaded } = useAdminMode()
   const [balances, setBalances] = useState<MemberBalance[]>([])
   const [loadingData, setLoadingData] = useState(true)
+  const [repairing, setRepairing] = useState(false)
+  const [repairResult, setRepairResult] = useState<string | null>(null)
 
   const fetchBalances = useCallback(async () => {
     if (!session) return
@@ -34,6 +36,32 @@ export default function BoardPage() {
     }
     if (session) fetchBalances()
   }, [session, loading, router, fetchBalances])
+
+  async function handleRepair() {
+    if (!session) return
+    setRepairing(true)
+    setRepairResult(null)
+    try {
+      const res = await fetch('/api/repair-balances', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId: session.groupId, adminId: session.memberId }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setRepairResult(data.error || 'Repair failed')
+      } else if (data.fixed) {
+        setRepairResult(`Fixed: adjusted by ${data.adjustment.toFixed(2)}`)
+        await fetchBalances()
+      } else {
+        setRepairResult('Balances are clean')
+      }
+    } catch {
+      setRepairResult('Repair failed')
+    } finally {
+      setRepairing(false)
+    }
+  }
 
   async function handleRemoveMember(memberId: string) {
     if (!session || !confirm('Remove this member? Their expenses will also be deleted.')) return
@@ -63,9 +91,21 @@ export default function BoardPage() {
           </div>
         </div>
         {session.isAdmin && (
-          <div className="mt-2">
+          <div className="mt-2 flex items-center gap-2">
             <AdminModeToggle adminMode={adminMode} setAdminMode={setAdminMode} />
+            {adminMode && (
+              <button
+                onClick={handleRepair}
+                disabled={repairing}
+                className="ml-auto text-xs px-3 py-1 border border-border rounded-full text-ink-soft hover:bg-surface disabled:opacity-50"
+              >
+                {repairing ? 'Repairing...' : 'Repair balances'}
+              </button>
+            )}
           </div>
+        )}
+        {repairResult && (
+          <p className="mt-1 text-xs text-ink-muted">{repairResult}</p>
         )}
       </header>
 

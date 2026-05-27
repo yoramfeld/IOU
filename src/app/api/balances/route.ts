@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { neon } from '@neondatabase/serverless'
+import { sql } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,12 +11,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing groupId' }, { status: 400 })
   }
 
-  const db = neon(process.env.DATABASE_URL!)
-
-  const [members, splits, expensePaidBy] = await Promise.all([
-    db`SELECT id, name, is_admin, group_id, starting_balance FROM members WHERE group_id = ${groupId}`,
-    db`SELECT es.member_id, es.amount FROM expense_splits es WHERE es.expense_id IN (SELECT id FROM expenses WHERE group_id = ${groupId})`,
-    db`SELECT paid_by AS member_id, amount FROM expenses WHERE group_id = ${groupId}`,
+  const [members, splits, payers] = await Promise.all([
+    sql`SELECT id, name, is_admin, group_id, starting_balance FROM members WHERE group_id = ${groupId}`,
+    sql`SELECT es.member_id, es.amount FROM expense_splits es
+        JOIN expenses e ON e.id = es.expense_id
+        WHERE e.group_id = ${groupId}`,
+    sql`SELECT ep.member_id, ep.amount FROM expense_payers ep
+        JOIN expenses e ON e.id = ep.expense_id
+        WHERE e.group_id = ${groupId}`,
   ])
 
   if (!members) {
@@ -26,7 +28,7 @@ export async function GET(request: Request) {
   const paidByMember: Record<string, number> = {}
   const owedByMember: Record<string, number> = {}
 
-  for (const p of expensePaidBy) {
+  for (const p of payers) {
     paidByMember[p.member_id] = (paidByMember[p.member_id] || 0) + Number(p.amount)
   }
   for (const s of splits) {

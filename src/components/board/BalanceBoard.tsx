@@ -68,6 +68,11 @@ export default function BalanceBoard({ balances, currency, currentMemberId, isAd
               )}>
                 {isPositive ? '+' : ''}{currency}{bal.toFixed(2)}
               </p>
+              {b.total_paid > 0 && (
+                <p className="text-xs text-ink-muted">
+                  paid {currency}{Number(b.total_paid).toFixed(2)}
+                </p>
+              )}
               {isAdmin && onRemoveMember && b.id !== currentMemberId && (
                 <button
                   onClick={() => onRemoveMember(b.id)}
