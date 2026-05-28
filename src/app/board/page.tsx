@@ -28,8 +28,31 @@ export default function BoardPage() {
         fetch(`/api/balances?groupId=${session.groupId}&_t=${t}`),
         fetch(`/api/expenses?groupId=${session.groupId}&_t=${t}`),
       ])
-      if (balRes.ok) setBalances(await balRes.json())
-      if (expRes.ok) setExpenses(await expRes.json())
+      if (balRes.ok && expRes.ok) {
+        const apiBalances: MemberBalance[] = await balRes.json()
+        const apiExpenses: (Expense & { splits: ExpenseSplit[]; payers: ExpensePayer[] })[] = await expRes.json()
+
+        // Recompute totals from the fresh expense data so balance always matches the transaction list,
+        // even if the balances API returns a slightly stale snapshot (non-atomic inserts).
+        const paidBy: Record<string, number> = {}
+        const owedBy: Record<string, number> = {}
+        for (const exp of apiExpenses) {
+          for (const p of exp.payers ?? []) paidBy[p.member_id] = (paidBy[p.member_id] ?? 0) + Number(p.amount)
+          for (const s of exp.splits ?? []) owedBy[s.member_id] = (owedBy[s.member_id] ?? 0) + Number(s.amount)
+        }
+        const recomputed = apiBalances.map(b => ({
+          ...b,
+          total_paid: paidBy[b.id] ?? 0,
+          total_owed: owedBy[b.id] ?? 0,
+          balance: b.starting_balance + (paidBy[b.id] ?? 0) + (owedBy[b.id] ?? 0),
+        }))
+
+        setBalances(recomputed)
+        setExpenses(apiExpenses)
+      } else {
+        if (balRes.ok) setBalances(await balRes.json())
+        if (expRes.ok) setExpenses(await expRes.json())
+      }
     } finally {
       setLoadingData(false)
     }
