@@ -16,7 +16,9 @@ export async function GET(request: Request) {
     FROM members WHERE group_id = ${groupId} ORDER BY name
   `
 
-  return NextResponse.json(data)
+  return NextResponse.json(data, {
+    headers: { 'Cache-Control': 'no-store, max-age=0' },
+  })
 }
 
 export async function PATCH(request: Request) {

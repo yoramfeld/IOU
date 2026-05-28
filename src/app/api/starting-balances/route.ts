@@ -15,7 +15,9 @@ export async function GET(request: Request) {
     SELECT id, name, starting_balance FROM members WHERE group_id = ${groupId} ORDER BY name
   `
 
-  return NextResponse.json(rows)
+  return NextResponse.json(rows, {
+    headers: { 'Cache-Control': 'no-store, max-age=0' },
+  })
 }
 
 export async function PUT(request: Request) {
