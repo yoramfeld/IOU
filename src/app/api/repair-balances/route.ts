@@ -48,62 +48,23 @@ export async function POST(request: Request) {
     return { id: m.id, name: m.name, starting_balance: startBal, paid: paidAmt, owed: owedAmt, balance }
   })
 
-  // Check if sum is already zero (within tolerance)
+  // Check if sum is zero (within tolerance)
   const totalSum = balances.reduce((s, b) => s + b.balance, 0)
   const roundedSum = Math.round(totalSum * 100) / 100
 
+  const formattedBalances = balances.map(b => ({ id: b.id, name: b.name, balance: Math.round(b.balance * 100) / 100 }))
+
   if (Math.abs(roundedSum) <= 0.01) {
     return NextResponse.json({
-      fixed: false,
-      adjustment: 0,
+      discrepancy: 0,
       message: 'Balances are clean',
-      balances: balances.map(b => ({ id: b.id, name: b.name, balance: Math.round(b.balance * 100) / 100 })),
+      balances: formattedBalances,
     })
   }
 
-  // Distribute rounding error across starting_balances
-  // Spread evenly, assign extra cents to the member with the largest absolute balance
-  const correction = -roundedSum
-  const perMember = Math.trunc((correction * 100) / balances.length) / 100
-  let remainder = Math.round((correction - perMember * balances.length) * 100) / 100
-
-  // Sort by absolute balance descending to assign remainder to the largest
-  const sorted = [...balances].sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance))
-
-  const adjustments: { id: string; name: string; adjustment: number; newStartingBalance: number }[] = []
-
-  for (const b of sorted) {
-    let adj = perMember
-    if (Math.abs(remainder) >= 0.005) {
-      const cent = remainder > 0 ? 0.01 : -0.01
-      adj += cent
-      remainder = Math.round((remainder - cent) * 100) / 100
-    }
-    if (Math.abs(adj) >= 0.005) {
-      const newStart = Math.round((b.starting_balance + adj) * 100) / 100
-      adjustments.push({ id: b.id, name: b.name, adjustment: Math.round(adj * 100) / 100, newStartingBalance: newStart })
-    }
-  }
-
-  // Apply adjustments
-  for (const a of adjustments) {
-    await sql`UPDATE members SET starting_balance = ${a.newStartingBalance} WHERE id = ${a.id}`
-  }
-
-  // Re-fetch to confirm
-  const updatedMembers = await sql`SELECT id, name, starting_balance FROM members WHERE group_id = ${groupId}`
-  const finalBalances = (updatedMembers as { id: string; name: string; starting_balance: string | number }[]).map(m => {
-    const startBal = Number(m.starting_balance || 0)
-    const paidAmt = paid[m.id] || 0
-    const owedAmt = owed[m.id] || 0
-    return { id: m.id, name: m.name, balance: Math.round((startBal + paidAmt + owedAmt) * 100) / 100 }
-  })
-
   return NextResponse.json({
-    fixed: true,
-    adjustment: Math.abs(roundedSum),
-    message: `Fixed: adjusted by ${Math.abs(roundedSum).toFixed(2)}`,
-    adjustments,
-    balances: finalBalances,
+    discrepancy: roundedSum,
+    message: `Balance discrepancy of ${Math.abs(roundedSum).toFixed(2)} detected. Starting balances can only be adjusted by an admin.`,
+    balances: formattedBalances,
   })
 }
