@@ -53,5 +53,7 @@ export async function GET(request: Request) {
 
   balances.sort((a, b) => a.balance - b.balance)
 
-  return NextResponse.json(balances)
+  return NextResponse.json(balances, {
+    headers: { 'Cache-Control': 'no-store, max-age=0' },
+  })
 }
