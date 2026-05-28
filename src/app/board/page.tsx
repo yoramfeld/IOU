@@ -43,6 +43,12 @@ export default function BoardPage() {
     if (session) fetchBalances()
   }, [session, loading, router, fetchBalances])
 
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchBalances() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [fetchBalances])
+
   async function handleRepair() {
     if (!session) return
     setRepairing(true)
