@@ -77,8 +77,14 @@ export default function GroupHub() {
             const balLoaded = bal !== undefined
             const isZero = balLoaded && Math.abs(bal) < 0.01
             const isLeaving = leavingGroupId === s.groupId
-            const fmt = (v: number) =>
-              new Intl.NumberFormat('en-US', { style: 'currency', currency: s.currency }).format(v)
+            const currency = s.currency || 'USD'
+            const fmt = (v: number) => {
+              try {
+                return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(v)
+              } catch {
+                return v.toFixed(2)
+              }
+            }
 
             return (
               <div key={s.groupId} className="border-2 border-green-500 rounded-xl overflow-hidden">
