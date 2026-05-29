@@ -42,7 +42,7 @@ export default function SettlementList({ transfers, currency, currentMemberId, i
         {transfers.length} transfer{transfers.length !== 1 ? 's' : ''} needed to settle up:
       </p>
       {transfers.map((t, i) => {
-        const canSettle = !!onSettle && (currentMemberId === t.to || currentMemberId === t.from || isAdmin)
+        const canSettle = !!onSettle && (currentMemberId === t.to || isAdmin)
         return (
           <div
             key={i}
