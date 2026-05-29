@@ -120,7 +120,7 @@ export default function BoardPage() {
       const bal = Number(b.balance)
       rows.push([
         b.name,
-        `Balance: ${bal >= 0 ? '+' : ''}${session.currency}${bal.toFixed(2)}  Paid: ${session.currency}${Number(b.total_paid).toFixed(2)}`,
+        `Balance: ${bal >= 0 ? '+' : ''}${bal.toFixed(2)}  Paid: ${Number(b.total_paid).toFixed(2)}`,
         '',
         '',
       ])
@@ -133,12 +133,12 @@ export default function BoardPage() {
         if (payer) {
           const dt = new Date(exp.created_at)
           const participants = exp.splits.map(s => nameById[s.member_id] ?? s.member_id).join(', ')
-          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, `+${session.currency}${Number(payer.amount).toFixed(2)}`, participants])
+          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, `+${Number(payer.amount).toFixed(2)}`, participants])
         }
         const split = exp.splits.find(s => s.member_id === b.id)
         if (split) {
           const dt = new Date(exp.created_at)
-          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, `-${session.currency}${Math.abs(Number(split.amount)).toFixed(2)}`, ''])
+          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, `-${Math.abs(Number(split.amount)).toFixed(2)}`, ''])
         }
       }
       rows.push(['', '', '', ''])
