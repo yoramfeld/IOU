@@ -38,5 +38,5 @@ export function calculateSettlements(balances: MemberBalance[]): Transfer[] {
     if (creditor.amount < 0.01) ci++
   }
 
-  return transfers
+  return transfers.sort((a, b) => b.amount - a.amount)
 }

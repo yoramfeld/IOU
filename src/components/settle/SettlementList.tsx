@@ -42,31 +42,29 @@ export default function SettlementList({ transfers, currency, currentMemberId, i
         {transfers.length} transfer{transfers.length !== 1 ? 's' : ''} needed to settle up:
       </p>
       {transfers.map((t, i) => {
-        const canSettle = onSettle && currentMemberId === t.to
+        const canSettle = !!onSettle && (currentMemberId === t.to || currentMemberId === t.from || isAdmin)
         return (
-          <div key={i} className="card space-y-2">
-            <div className="flex items-center gap-3">
-              <MemberAvatar name={t.fromName} size="sm" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm">
-                  <span className="font-semibold">{t.fromName}</span>
-                  <span className="mx-1 text-base font-bold text-accent">→</span>
-                  <span className="font-semibold">{t.toName}</span>
-                </p>
-              </div>
-              <p className="font-bold text-sm text-accent shrink-0">
-                {currency}{t.amount.toFixed(2)}
+          <div
+            key={i}
+            onClick={() => canSettle && settlingIndex === null && handleSettle(t, i)}
+            className={`card flex items-center gap-3 ${canSettle ? 'cursor-pointer active:opacity-70' : ''}`}
+          >
+            <MemberAvatar name={t.fromName} size="sm" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm">
+                <span className="font-semibold">{t.fromName}</span>
+                <span className="mx-1 text-base font-bold text-accent">→</span>
+                <span className="font-semibold">{t.toName}</span>
               </p>
+              {canSettle && (
+                <p className="text-xs text-ink-muted mt-0.5">
+                  {settlingIndex === i ? 'Settling...' : 'Tap to mark settled'}
+                </p>
+              )}
             </div>
-            {canSettle && (
-              <button
-                onClick={() => handleSettle(t, i)}
-                disabled={settlingIndex !== null}
-                className="w-full text-xs font-medium px-3 py-1.5 rounded-full bg-accent text-white hover:bg-accent/90 disabled:opacity-50"
-              >
-                {settlingIndex === i ? 'Settling...' : 'Mark settled'}
-              </button>
-            )}
+            <p className="font-bold text-sm text-accent shrink-0">
+              {currency}{t.amount.toFixed(2)}
+            </p>
           </div>
         )
       })}
