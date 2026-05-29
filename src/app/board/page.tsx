@@ -140,19 +140,19 @@ export default function BoardPage() {
         if (payer) {
           const dt = new Date(exp.created_at)
           const participants = exp.splits.map(s => nameById[s.member_id] ?? s.member_id).join(', ')
-          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, `+${Number(payer.amount).toFixed(2)}`, participants])
+          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, Number(payer.amount), participants])
         }
         const split = exp.splits.find(s => s.member_id === b.id)
         if (split) {
           const dt = new Date(exp.created_at)
-          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, `-${Math.abs(Number(split.amount)).toFixed(2)}`, ''])
+          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, -Math.abs(Number(split.amount)), ''])
         }
       }
       rows.push(['', '', '', ''])
     }
 
     const ws = XLSX.utils.aoa_to_sheet(rows)
-    ws['!cols'] = [{ wch: 15 }, { wch: 50 }, { wch: 15 }, { wch: 50 }]
+    ws['!cols'] = [{ wch: 10 }, { wch: 30 }, { wch: 10 }, { wch: 30 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Balances')
     const now = new Date()
