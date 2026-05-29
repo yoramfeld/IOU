@@ -98,6 +98,54 @@ export default function BoardPage() {
     }
   }
 
+  async function handleExport() {
+    if (!session || balances.length === 0) return
+    const XLSX = await import('xlsx')
+
+    const sorted = [...balances].sort((a, b) => {
+      const diff = Number(a.balance) - Number(b.balance)
+      return diff !== 0 ? diff : a.name.localeCompare(b.name)
+    })
+
+    const rows: (string | number)[][] = []
+    const chrono = [...expenses].reverse()
+
+    for (const b of sorted) {
+      const bal = Number(b.balance)
+      rows.push([
+        b.name,
+        `Balance: ${bal >= 0 ? '+' : ''}${session.currency}${bal.toFixed(2)}`,
+        `Paid: ${session.currency}${Number(b.total_paid).toFixed(2)}`,
+        '',
+      ])
+      rows.push(['Date', 'Description', 'Paid', 'Owed'])
+
+      for (const exp of chrono) {
+        const effectivePayers = exp.payers?.length
+          ? exp.payers
+          : [{ member_id: exp.paid_by, amount: exp.amount }]
+        const payer = effectivePayers.find(p => p.member_id === b.id)
+        if (payer) {
+          const dt = new Date(exp.created_at)
+          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, Number(payer.amount), ''])
+        }
+        const split = exp.splits.find(s => s.member_id === b.id)
+        if (split) {
+          const dt = new Date(exp.created_at)
+          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, '', Math.abs(Number(split.amount))])
+        }
+      }
+      rows.push(['', '', '', ''])
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Balances')
+    const today = new Date()
+    const d = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    XLSX.writeFile(wb, `iou-${session.groupName}-${d}.xlsx`)
+  }
+
   async function handleRenameMember(memberId: string, newName: string) {
     if (!session) return
     await fetch('/api/members', {
@@ -134,6 +182,19 @@ export default function BoardPage() {
               {session.name} · <Link href="/" className="hover:text-accent transition-colors">{session.groupName}</Link>
             </p>
           </div>
+          <button
+            onClick={handleExport}
+            title="Download as Excel"
+            className="p-1.5 rounded-lg text-ink-muted hover:text-accent hover:bg-surface transition-colors"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="8" y1="13" x2="16" y2="13"/>
+              <line x1="8" y1="17" x2="16" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </button>
         </div>
         {session.isAdmin && (
           <div className="mt-2 flex items-center gap-2">
