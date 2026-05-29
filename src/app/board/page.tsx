@@ -19,6 +19,7 @@ export default function BoardPage() {
   const [loadingData, setLoadingData] = useState(true)
   const [repairing, setRepairing] = useState(false)
   const [repairResult, setRepairResult] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const fetchBalances = useCallback(async () => {
     if (!session) return
@@ -100,6 +101,7 @@ export default function BoardPage() {
 
   async function handleExport() {
     if (!session || balances.length === 0) return
+    setExporting(true)
     const XLSX = await import('xlsx')
 
     const nameById: Record<string, string> = {}
@@ -148,6 +150,7 @@ export default function BoardPage() {
     const d = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     const t = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
     XLSX.writeFile(wb, `iou-${session.groupName}-${d}-${t}.xlsx`)
+    setTimeout(() => setExporting(false), 2000)
   }
 
   async function handleRenameMember(memberId: string, newName: string) {
@@ -213,6 +216,9 @@ export default function BoardPage() {
         )}
         {repairResult && (
           <p className="mt-1 text-xs text-ink-muted">{repairResult}</p>
+        )}
+        {exporting && (
+          <p className="mt-1 text-xs text-ink-muted">Downloading report...</p>
         )}
       </header>
 
