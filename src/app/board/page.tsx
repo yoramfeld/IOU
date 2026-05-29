@@ -19,7 +19,7 @@ export default function BoardPage() {
   const [loadingData, setLoadingData] = useState(true)
   const [repairing, setRepairing] = useState(false)
   const [repairResult, setRepairResult] = useState<string | null>(null)
-  const [exporting, setExporting] = useState(false)
+  const [exportState, setExportState] = useState<'idle' | 'loading' | 'done'>('idle')
 
   const fetchBalances = useCallback(async () => {
     if (!session) return
@@ -101,7 +101,8 @@ export default function BoardPage() {
 
   async function handleExport() {
     if (!session || balances.length === 0) return
-    setExporting(true)
+    setExportState('loading')
+    await new Promise(r => setTimeout(r, 0)) // yield so React paints the spinner
     const XLSX = await import('xlsx')
 
     const nameById: Record<string, string> = {}
@@ -150,7 +151,8 @@ export default function BoardPage() {
     const d = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     const t = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
     XLSX.writeFile(wb, `iou-${session.groupName}-${d}-${t}.xlsx`)
-    setTimeout(() => setExporting(false), 2000)
+    setExportState('done')
+    setTimeout(() => setExportState('idle'), 2000)
   }
 
   async function handleRenameMember(memberId: string, newName: string) {
@@ -191,13 +193,26 @@ export default function BoardPage() {
           </div>
           <button
             onClick={handleExport}
+            disabled={exportState !== 'idle'}
             title="Download as Excel"
-            className="p-1.5 rounded-lg text-ink-muted hover:text-accent hover:bg-surface transition-colors"
+            className="p-1.5 rounded-lg text-ink-muted hover:text-accent hover:bg-surface transition-colors disabled:cursor-default"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24">
-              <rect x="1" y="1" width="22" height="22" rx="3" fill="#217346"/>
-              <path d="M7 7l5 5 5-5M7 17l5-5 5 5" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-            </svg>
+            {exportState === 'loading' && (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#217346" strokeWidth="2.5" strokeLinecap="round" className="animate-spin">
+                <path d="M12 2a10 10 0 0 1 10 10" />
+              </svg>
+            )}
+            {exportState === 'done' && (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#217346" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            )}
+            {exportState === 'idle' && (
+              <svg width="20" height="20" viewBox="0 0 24 24">
+                <rect x="1" y="1" width="22" height="22" rx="3" fill="#217346"/>
+                <path d="M7 7l5 5 5-5M7 17l5-5 5 5" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+              </svg>
+            )}
           </button>
         </div>
         {session.isAdmin && (
@@ -216,9 +231,6 @@ export default function BoardPage() {
         )}
         {repairResult && (
           <p className="mt-1 text-xs text-ink-muted">{repairResult}</p>
-        )}
-        {exporting && (
-          <p className="mt-1 text-xs text-ink-muted">Downloading report...</p>
         )}
       </header>
 
