@@ -31,8 +31,11 @@ create table expenses (
   amount      numeric(10,2) not null check (amount > 0),
   description text not null,
   entered_by  uuid not null references members(id) on delete cascade,
+  receipt_url text,
   created_at  timestamptz not null default now()
 );
+-- Migration (run once on existing DB):
+-- alter table expenses add column if not exists receipt_url text;
 
 -- Expense payers (multi-payer support)
 create table expense_payers (

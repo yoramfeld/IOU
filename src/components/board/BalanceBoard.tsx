@@ -40,6 +40,7 @@ export default function BalanceBoard({ balances, expenses, currency, currentMemb
     : 0
 
   const total = Math.round(balances.reduce((s, b) => s + Number(b.balance), 0) * 100) / 100
+  const totalPaid = Math.round(balances.reduce((s, b) => s + Number(b.total_paid), 0) * 100) / 100
 
   return (
     <div className="space-y-2">
@@ -170,8 +171,9 @@ export default function BalanceBoard({ balances, expenses, currency, currentMemb
           </div>
         )
       })}
-      <div className="text-center text-xs text-ink-muted pt-2">
-        Total: {currency}{total.toFixed(2)}
+      <div className="text-center text-xs text-ink-muted pt-2 space-y-0.5">
+        <div>Total: {currency}{total.toFixed(2)}</div>
+        <div>Total paid: {currency}{totalPaid.toFixed(2)}</div>
       </div>
     </div>
   )

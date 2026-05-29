@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import type { Expense, ExpensePayer, ExpenseSplit, Member } from '@/types'
 import MemberAvatar from '@/components/ui/MemberAvatar'
 
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export default function ExpenseCard({ expense, members, currency, isAdmin, onEdit, onDelete, payerBalances }: Props) {
+  const [showReceipt, setShowReceipt] = useState(false)
   const payer = members.find(m => m.id === expense.paid_by)
   const enteredBy = members.find(m => m.id === expense.entered_by)
   const isMultiPayer = (expense.payers?.length ?? 0) > 1
@@ -122,7 +124,22 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onEdi
         </div>
       </div>
       <div className="flex items-end justify-between mt-2 gap-2">
-        <p className="text-xs text-ink-muted whitespace-nowrap overflow-hidden">{dateStr}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-ink-muted whitespace-nowrap overflow-hidden">{dateStr}</p>
+          {expense.receipt_url && (
+            <button
+              onClick={() => setShowReceipt(true)}
+              className="text-ink-muted hover:text-accent transition-colors"
+              title="View receipt"
+            >
+              <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="1" y="5" width="18" height="13" rx="2"/>
+                <circle cx="10" cy="11.5" r="3.5"/>
+                <path d="M7 5V4a1 1 0 011-1h4a1 1 0 011 1v1"/>
+              </svg>
+            </button>
+          )}
+        </div>
         {!isSettlement && (
           <div className="flex gap-1 flex-wrap justify-end">
             {isUnequal ? (
@@ -141,6 +158,20 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onEdi
           </div>
         )}
       </div>
+      {showReceipt && expense.receipt_url && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setShowReceipt(false)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={expense.receipt_url}
+            alt="Receipt"
+            className="max-w-full max-h-full object-contain rounded-lg"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   )
 }

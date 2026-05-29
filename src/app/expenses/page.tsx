@@ -46,7 +46,7 @@ export default function ExpensesPage() {
     if (session) fetchData()
   }, [session, loading, router, fetchData])
 
-  async function handleAddExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[] }) {
+  async function handleAddExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[]; receiptUrl?: string }) {
     if (!session) return
     const res = await fetch('/api/expenses', {
       method: 'POST',
@@ -60,6 +60,7 @@ export default function ExpensesPage() {
         customSplits: data.customSplits,
         payers: data.payers,
         enteredBy: session.memberId,
+        receiptUrl: data.receiptUrl,
       }),
     })
     if (!res.ok) throw new Error('Failed')

@@ -167,6 +167,11 @@ export default function SettingsPage() {
     setTestSteps([])
   }
 
+  async function handleCopyLog() {
+    const content = buildReportText()
+    await navigator.clipboard.writeText(content)
+  }
+
   async function handleDownloadReport() {
     const content = buildReportText()
     const name = `iou-test-report-${new Date().toISOString().slice(0, 10)}.txt`
@@ -309,6 +314,9 @@ export default function SettingsPage() {
             <div className="flex gap-2">
               <button onClick={handleDownloadReport} className="btn btn-outline text-xs py-1">
                 Download report
+              </button>
+              <button onClick={handleCopyLog} className="btn btn-outline text-xs py-1">
+                Copy log
               </button>
               <button onClick={clearReport} className="btn btn-outline text-xs py-1 text-ink-muted">
                 Dismiss

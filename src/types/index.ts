@@ -23,6 +23,7 @@ export interface Expense {
   amount: number
   description: string
   entered_by: string
+  receipt_url?: string | null
   created_at: string
   payers?: ExpensePayer[]
 }

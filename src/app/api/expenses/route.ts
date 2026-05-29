@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy, payers } = await request.json()
+  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy, payers, receiptUrl } = await request.json()
 
   const hasCustom = Array.isArray(customSplits) && customSplits.length > 0
   if (!groupId || !paidBy || !amount || !description?.trim() || !enteredBy) {
@@ -62,8 +62,8 @@ export async function POST(request: Request) {
 
   // Create expense (paid_by = primary payer for display)
   const expenseRows = await sql`
-    INSERT INTO expenses (group_id, paid_by, amount, description, entered_by)
-    VALUES (${groupId}, ${resolvedPayers[0].memberId}, ${Number(amount)}, ${description.trim()}, ${enteredBy})
+    INSERT INTO expenses (group_id, paid_by, amount, description, entered_by, receipt_url)
+    VALUES (${groupId}, ${resolvedPayers[0].memberId}, ${Number(amount)}, ${description.trim()}, ${enteredBy}, ${receiptUrl ?? null})
     RETURNING id
   `
   const expense = expenseRows[0]

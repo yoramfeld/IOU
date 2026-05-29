@@ -24,6 +24,7 @@ interface Props {
     splitAmong: string[]
     customSplits?: { memberId: string; amount: number }[]
     payers: { memberId: string; amount: number }[]
+    receiptUrl?: string
   }) => Promise<void>
   onClose: () => void
 }
@@ -73,6 +74,8 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   })
   const [isManualSplit, setIsManualSplit] = useState(!!editExpense)
   const [focusedOrderedId, setFocusedOrderedId] = useState<string | null>(null)
+  const [receiptFile, setReceiptFile] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -250,6 +253,14 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     setSubmitting(true)
     setError('')
     try {
+      let receiptUrl: string | undefined
+      if (receiptFile) {
+        const fd = new FormData()
+        fd.append('file', receiptFile)
+        const uploadRes = await fetch('/api/expenses/upload', { method: 'POST', body: fd })
+        if (!uploadRes.ok) { showError('Failed to upload receipt'); setSubmitting(false); return }
+        receiptUrl = (await uploadRes.json()).url
+      }
       await onSubmit({
         paidBy,
         amount: finalTotal,
@@ -257,6 +268,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         splitAmong: computedCustomSplits.map(s => s.memberId),
         customSplits: computedCustomSplits,
         payers,
+        receiptUrl,
       })
       onClose()
     } catch {
@@ -287,6 +299,49 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
             autoFocus
           />
         </div>
+
+        {/* Receipt attachment (creation only) */}
+        {!editExpense && (
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => setReceiptFile(e.target.files?.[0] ?? null)}
+            />
+            {receiptFile ? (
+              <div className="flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" className="shrink-0 text-ink-muted" stroke="currentColor" strokeWidth="1.5">
+                  <rect x="1" y="5" width="18" height="13" rx="2"/>
+                  <circle cx="10" cy="11.5" r="3.5"/>
+                  <path d="M7 5V4a1 1 0 011-1h4a1 1 0 011 1v1"/>
+                </svg>
+                <span className="text-xs text-ink-muted truncate flex-1">{receiptFile.name}</span>
+                <button
+                  type="button"
+                  onClick={() => { setReceiptFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}
+                  className="text-xs text-red shrink-0"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 text-xs text-ink-soft border border-border rounded-lg px-3 py-2 w-full"
+              >
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <rect x="1" y="5" width="18" height="13" rx="2"/>
+                  <circle cx="10" cy="11.5" r="3.5"/>
+                  <path d="M7 5V4a1 1 0 011-1h4a1 1 0 011 1v1"/>
+                </svg>
+                Attach receipt (optional)
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Bill | Tip | Total+Roundup */}
         <div className="flex gap-2 items-end">
