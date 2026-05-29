@@ -152,6 +152,7 @@ export default function BoardPage() {
     }
 
     const ws = XLSX.utils.aoa_to_sheet(rows)
+    ws['!cols'] = [{ wch: 22 }, { wch: 42 }, { wch: 12 }, { wch: 42 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Balances')
     const now = new Date()
