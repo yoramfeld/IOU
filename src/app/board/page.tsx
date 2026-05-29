@@ -116,6 +116,13 @@ export default function BoardPage() {
     const rows: (string | number)[][] = []
     const chrono = [...expenses].reverse()
 
+    const fmtDate = (iso: string) => { const d = new Date(iso); return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}` }
+    const earliest = chrono.length ? fmtDate(chrono[0].created_at) : ''
+    const latest   = chrono.length ? fmtDate(chrono[chrono.length - 1].created_at) : ''
+    const dateSpan = chrono.length ? (earliest === latest ? earliest : `${earliest} – ${latest}`) : ''
+    rows.push([`IOU – ${session.groupName}`, dateSpan, `Currency: ${session.currency}`, ''])
+    rows.push(['', '', '', ''])
+
     for (const b of sorted) {
       const bal = Number(b.balance)
       rows.push([
