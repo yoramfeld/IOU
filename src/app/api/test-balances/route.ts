@@ -240,14 +240,20 @@ async function runScenario(
       await log(`  Settlement count: expected ${expectedCount}, got ${transfers.length} ✗`, 'fail')
     } else {
       await log('Verifying settlements...', 'info')
-      for (let i = 0; i < scenario.expectedSettlements.length; i++) {
-        const exp = scenario.expectedSettlements[i]
-        const act = transfers[i]
-        const fromName = nameById[act.from]
-        const toName   = nameById[act.to]
+      // Sort both lists canonically so order doesn't matter
+      const sortKey = (from: string, to: string, amount: number) =>
+        `${from}|${to}|${amount.toFixed(2)}`
+      const namedActual = transfers
+        .map(t => ({ from: nameById[t.from], to: nameById[t.to], amount: t.amount }))
+        .sort((a, b) => sortKey(a.from, a.to, a.amount).localeCompare(sortKey(b.from, b.to, b.amount)))
+      const sortedExpected = [...scenario.expectedSettlements]
+        .sort((a, b) => sortKey(a.from, a.to, a.amount).localeCompare(sortKey(b.from, b.to, b.amount)))
+      for (let i = 0; i < sortedExpected.length; i++) {
+        const exp = sortedExpected[i]
+        const act = namedActual[i]
         const label = `Settlement ${i+1}: ${exp.from}→${exp.to} €${exp.amount}`
-        const ok = fromName === exp.from && toName === exp.to && Math.abs(act.amount - exp.amount) < 0.005
-        const actStr = `${fromName}→${toName} €${Math.round(act.amount*100)/100}`
+        const ok = act.from === exp.from && act.to === exp.to && Math.abs(act.amount - exp.amount) < 0.005
+        const actStr = `${act.from}→${act.to} €${Math.round(act.amount*100)/100}`
         if (ok) {
           passed++
           await log(`  ${label} ✓`, 'ok')
