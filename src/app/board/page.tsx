@@ -120,7 +120,7 @@ export default function BoardPage() {
     const earliest = chrono.length ? fmtDate(chrono[0].created_at) : ''
     const latest   = chrono.length ? fmtDate(chrono[chrono.length - 1].created_at) : ''
     const dateSpan = chrono.length ? (earliest === latest ? earliest : `${earliest} – ${latest}`) : ''
-    rows.push([`IOU – ${session.groupName}`, dateSpan, `Currency: ${session.currency}`, ''])
+    rows.push([`IOU – ${session.groupName}  |  ${dateSpan}  |  Currency: ${session.currency}`, '', '', ''])
     rows.push(['', '', '', ''])
 
     for (const b of sorted) {
@@ -152,7 +152,7 @@ export default function BoardPage() {
     }
 
     const ws = XLSX.utils.aoa_to_sheet(rows)
-    ws['!cols'] = [{ wch: 22 }, { wch: 42 }, { wch: 12 }, { wch: 42 }]
+    ws['!cols'] = [{ wch: 15 }, { wch: 50 }, { wch: 15 }, { wch: 50 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Balances')
     const now = new Date()
