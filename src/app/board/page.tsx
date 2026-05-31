@@ -120,14 +120,15 @@ export default function BoardPage() {
     const earliest = chrono.length ? fmtDate(chrono[0].created_at) : ''
     const latest   = chrono.length ? fmtDate(chrono[chrono.length - 1].created_at) : ''
     const dateSpan = chrono.length ? (earliest === latest ? earliest : `${earliest} – ${latest}`) : ''
-    rows.push([`IOU – ${session.groupName}  |  ${dateSpan}  |  Currency: ${session.currency}`, '', '', ''])
-    rows.push(['', '', '', ''])
+    rows.push([`IOU – ${session.groupName}  |  ${dateSpan}  |  Currency: ${session.currency}`, '', '', '', ''])
+    rows.push(['', '', '', '', ''])
 
     for (const b of sorted) {
       const bal = Number(b.balance)
       rows.push([
         b.name,
         `Balance: ${bal >= 0 ? '+' : ''}${bal.toFixed(2)}  Paid: ${Number(b.total_paid).toFixed(2)}`,
+        '',
         '',
         '',
       ])
@@ -140,19 +141,20 @@ export default function BoardPage() {
         if (payer) {
           const dt = new Date(exp.created_at)
           const participants = exp.splits.map(s => nameById[s.member_id] ?? s.member_id).join(', ')
-          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, Number(payer.amount), participants])
+          const ratingStr = exp.rating ? '★'.repeat(exp.rating) : ''
+          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, Number(payer.amount), participants, ratingStr])
         }
         const split = exp.splits.find(s => s.member_id === b.id)
         if (split) {
           const dt = new Date(exp.created_at)
-          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, -Math.abs(Number(split.amount)), ''])
+          rows.push([`${dt.getDate()}/${dt.getMonth() + 1}`, exp.description, -Math.abs(Number(split.amount)), '', ''])
         }
       }
-      rows.push(['', '', '', ''])
+      rows.push(['', '', '', '', ''])
     }
 
     const ws = XLSX.utils.aoa_to_sheet(rows)
-    ws['!cols'] = [{ wch: 10 }, { wch: 30 }, { wch: 10 }, { wch: 30 }]
+    ws['!cols'] = [{ wch: 10 }, { wch: 30 }, { wch: 10 }, { wch: 30 }, { wch: 8 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Balances')
     const now = new Date()

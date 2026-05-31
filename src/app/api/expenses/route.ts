@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy, payers, receiptUrl } = await request.json()
+  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy, payers, receiptUrl, rating } = await request.json()
 
   const hasCustom = Array.isArray(customSplits) && customSplits.length > 0
   if (!groupId || !paidBy || !amount || !description?.trim() || !enteredBy) {
@@ -62,8 +62,8 @@ export async function POST(request: Request) {
 
   // Create expense (paid_by = primary payer for display)
   const expenseRows = await sql`
-    INSERT INTO expenses (group_id, paid_by, amount, description, entered_by, receipt_url)
-    VALUES (${groupId}, ${resolvedPayers[0].memberId}, ${Number(amount)}, ${description.trim()}, ${enteredBy}, ${receiptUrl ?? null})
+    INSERT INTO expenses (group_id, paid_by, amount, description, entered_by, receipt_url, rating)
+    VALUES (${groupId}, ${resolvedPayers[0].memberId}, ${Number(amount)}, ${description.trim()}, ${enteredBy}, ${receiptUrl ?? null}, ${rating ?? null})
     RETURNING id
   `
   const expense = expenseRows[0]
@@ -164,7 +164,7 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const { expenseId, adminId, description, amount, payers, splitAmong, customSplits } = await request.json()
+  const { expenseId, adminId, description, amount, payers, splitAmong, customSplits, rating } = await request.json()
 
   if (!expenseId || !adminId || !description?.trim() || !amount) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
@@ -199,7 +199,7 @@ export async function PUT(request: Request) {
 
   // Update the expense row
   await sql`
-    UPDATE expenses SET description = ${description.trim()}, amount = ${Number(amount)}, paid_by = ${resolvedPayers[0].memberId}
+    UPDATE expenses SET description = ${description.trim()}, amount = ${Number(amount)}, paid_by = ${resolvedPayers[0].memberId}, rating = ${rating ?? null}
     WHERE id = ${expenseId}
   `
 

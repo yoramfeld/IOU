@@ -126,6 +126,18 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onEdi
       <div className="flex items-end justify-between mt-2 gap-2">
         <div className="flex items-center gap-2">
           <p className="text-xs text-ink-muted whitespace-nowrap overflow-hidden">{dateStr}</p>
+          {expense.rating != null && expense.rating > 0 && (
+            <div className="flex items-center gap-0.5">
+              {[1,2,3,4,5].map(star => (
+                <svg key={star} width="11" height="11" viewBox="0 0 24 24"
+                  fill={star <= expense.rating! ? '#f59e0b' : 'none'}
+                  stroke={star <= expense.rating! ? '#f59e0b' : '#d1d5db'}
+                  strokeWidth="1.5">
+                  <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+                </svg>
+              ))}
+            </div>
+          )}
           {expense.receipt_url && (
             <button
               onClick={() => setShowReceipt(true)}

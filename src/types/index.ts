@@ -24,6 +24,7 @@ export interface Expense {
   description: string
   entered_by: string
   receipt_url?: string | null
+  rating?: number | null
   created_at: string
   payers?: ExpensePayer[]
 }

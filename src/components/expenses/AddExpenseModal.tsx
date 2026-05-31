@@ -6,6 +6,7 @@ import type { Member } from '@/types'
 interface EditExpenseData {
   description: string
   amount: number
+  rating?: number
   payers: { memberId: string; amount: number }[]
   splits: { memberId: string; amount: number }[]
 }
@@ -26,6 +27,7 @@ interface Props {
     customSplits?: { memberId: string; amount: number }[]
     payers: { memberId: string; amount: number }[]
     receiptUrl?: string
+    rating?: number
   }) => Promise<void>
   onClose: () => void
 }
@@ -44,6 +46,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   })
 
   const [description, setDescription] = useState(editExpense?.description ?? '')
+  const [rating, setRating] = useState<number>(editExpense?.rating ?? 0)
   const [amount, setAmount] = useState(editExpense ? String(editExpense.amount) : '')
   const [tipPct, setTipPct] = useState(editExpense ? 0 : readSavedTip)
   const [roundUp, setRoundUp] = useState(editExpense ? false : true)
@@ -274,6 +277,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         customSplits: computedCustomSplits,
         payers,
         receiptUrl,
+        rating: rating > 0 ? rating : undefined,
       })
       onClose()
     } catch {
@@ -305,73 +309,27 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
           />
         </div>
 
-        {/* Receipt attachment (creation only) */}
-        {!editExpense && (
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={e => setReceiptFile(e.target.files?.[0] ?? null)}
-            />
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={e => setReceiptFile(e.target.files?.[0] ?? null)}
-            />
-            {receiptFile ? (
-              <div className="flex items-center gap-2">
-                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" className="shrink-0 text-ink-muted" stroke="currentColor" strokeWidth="1.5">
-                  <rect x="1" y="5" width="18" height="13" rx="2"/>
-                  <circle cx="10" cy="11.5" r="3.5"/>
-                  <path d="M7 5V4a1 1 0 011-1h4a1 1 0 011 1v1"/>
-                </svg>
-                <span className="text-xs text-ink-muted truncate flex-1">{receiptFile.name}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReceiptFile(null)
-                    if (fileInputRef.current) fileInputRef.current.value = ''
-                    if (cameraInputRef.current) cameraInputRef.current.value = ''
-                  }}
-                  className="text-xs text-red shrink-0"
-                >
-                  Remove
-                </button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center justify-center gap-1.5 text-xs text-ink-soft border border-border rounded-lg px-3 py-2 flex-1"
-                >
-                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <rect x="1" y="5" width="18" height="13" rx="2"/>
-                    <circle cx="10" cy="11.5" r="3.5"/>
-                    <path d="M7 5V4a1 1 0 011-1h4a1 1 0 011 1v1"/>
-                  </svg>
-                  Gallery
-                </button>
-                <button
-                  type="button"
-                  onClick={() => cameraInputRef.current?.click()}
-                  className="flex items-center justify-center gap-1.5 text-xs text-ink-soft border border-border rounded-lg px-3 py-2 flex-1"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
-                    <circle cx="12" cy="13" r="3"/>
-                  </svg>
-                  Camera
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Star rating */}
+        <div className="flex items-center gap-1">
+          {[1,2,3,4,5].map(star => (
+            <button
+              key={star}
+              type="button"
+              onClick={() => setRating(rating === star ? 0 : star)}
+              className="p-0.5 transition-transform active:scale-110"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill={star <= rating ? '#f59e0b' : 'none'} stroke={star <= rating ? '#f59e0b' : '#d1d5db'} strokeWidth="1.5">
+                <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+              </svg>
+            </button>
+          ))}
+          {rating > 0 && (
+            <span className="text-xs text-ink-muted ml-1">{rating}/5</span>
+          )}
+        </div>
+
+        {/* Receipt attachment — disabled until Vercel Blob is configured */}
+        {/* {!editExpense && ( ... )} */}
 
         {/* Bill | Tip | Total+Roundup */}
         <div className="flex gap-2 items-end">

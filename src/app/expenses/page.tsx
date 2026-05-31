@@ -46,7 +46,7 @@ export default function ExpensesPage() {
     if (session) fetchData()
   }, [session, loading, router, fetchData])
 
-  async function handleAddExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[]; receiptUrl?: string }) {
+  async function handleAddExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[]; receiptUrl?: string; rating?: number }) {
     if (!session) return
     const res = await fetch('/api/expenses', {
       method: 'POST',
@@ -61,6 +61,7 @@ export default function ExpensesPage() {
         payers: data.payers,
         enteredBy: session.memberId,
         receiptUrl: data.receiptUrl,
+        rating: data.rating,
       }),
     })
     if (!res.ok) throw new Error('Failed')
@@ -77,7 +78,7 @@ export default function ExpensesPage() {
     await fetchData()
   }
 
-  async function handleEditExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[] }) {
+  async function handleEditExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[]; rating?: number }) {
     if (!session || !editingExpense) return
     const res = await fetch('/api/expenses', {
       method: 'PUT',
@@ -90,6 +91,7 @@ export default function ExpensesPage() {
         payers: data.payers,
         splitAmong: data.splitAmong,
         customSplits: data.customSplits,
+        rating: data.rating,
       }),
     })
     if (!res.ok) throw new Error('Failed')
@@ -235,6 +237,7 @@ export default function ExpensesPage() {
           editExpense={editingExpense ? {
             description: editingExpense.description,
             amount: Number(editingExpense.amount),
+            rating: editingExpense.rating ?? 0,
             payers: (editingExpense.payers ?? []).map(p => ({ memberId: p.member_id, amount: Number(p.amount) })),
             splits: editingExpense.splits.map(s => ({ memberId: s.member_id, amount: Number(s.amount) })),
           } : undefined}
