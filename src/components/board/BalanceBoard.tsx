@@ -42,12 +42,28 @@ export default function BalanceBoard({ balances, expenses, currency, currentMemb
   const total = Math.round(balances.reduce((s, b) => s + Number(b.balance), 0) * 100) / 100
   const totalPaid = Math.round(balances.reduce((s, b) => s + Number(b.total_paid), 0) * 100) / 100
 
+  // Members who reached ~0 balance via a settlement
+  const settledIds = new Set<string>()
+  if (expenses) {
+    const inSettlement = new Set<string>()
+    for (const exp of expenses) {
+      if (!exp.description.startsWith('⚡ Settlement:')) continue
+      const effectivePayers = exp.payers?.length ? exp.payers : [{ member_id: exp.paid_by, amount: exp.amount }]
+      for (const p of effectivePayers) inSettlement.add(p.member_id)
+      for (const s of exp.splits) inSettlement.add(s.member_id)
+    }
+    for (const b of balances) {
+      if (Math.abs(Number(b.balance)) < 0.01 && inSettlement.has(b.id)) settledIds.add(b.id)
+    }
+  }
+
   return (
     <div className="space-y-2">
       {sorted.map(b => {
         const bal = Number(b.balance)
         const isPositive = bal > 0.01
         const isNegative = bal < -0.01
+        const isSettled = settledIds.has(b.id)
         const isMe = b.id === currentMemberId
         const isTopDebtor = minBalKey !== null && bal.toFixed(2) === minBalKey
 
@@ -85,6 +101,7 @@ export default function BalanceBoard({ balances, expenses, currency, currentMemb
         return (
           <div key={b.id} className={clsx(
             'card',
+            isSettled && !isMe && 'opacity-40',
             isMe && 'ring-2 ring-accent/20',
             isPositive && 'bg-green/5',
             isTopDebtor && 'bg-red/5 ring-1 ring-red/20',

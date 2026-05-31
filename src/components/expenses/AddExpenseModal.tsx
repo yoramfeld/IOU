@@ -16,6 +16,7 @@ interface Props {
   isAdmin: boolean
   currency: string
   memberBalances?: Record<string, number>
+  settledMemberIds?: Set<string>
   editExpense?: EditExpenseData
   onSubmit: (data: {
     paidBy: string
@@ -35,7 +36,7 @@ function readSavedTip(): number {
   try { return parseInt(localStorage.getItem('iou_tip_pct') || '0', 10) || 0 } catch { return 0 }
 }
 
-export default function AddExpenseModal({ members, currentMemberId, isAdmin, currency, memberBalances, editExpense, onSubmit, onClose }: Props) {
+export default function AddExpenseModal({ members, currentMemberId, isAdmin, currency, memberBalances, settledMemberIds, editExpense, onSubmit, onClose }: Props) {
   // Sort by biggest debt first (most negative balance), randomize ties — fixed on open
   const [sortedMembers] = useState<Member[]>(() => {
     const shuffled = [...members].sort(() => Math.random() - 0.5)
@@ -68,9 +69,12 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const [calcExpr, setCalcExpr] = useState('')
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [excluded, setExcluded] = useState<Set<string>>(() => {
-    if (!editExpense) return new Set()
-    const splitIds = new Set(editExpense.splits.map(s => s.memberId))
-    return new Set(members.filter(m => !splitIds.has(m.id)).map(m => m.id))
+    if (editExpense) {
+      const splitIds = new Set(editExpense.splits.map(s => s.memberId))
+      return new Set(members.filter(m => !splitIds.has(m.id)).map(m => m.id))
+    }
+    // Default-exclude members who have settled (zero balance after a settlement)
+    return new Set(members.filter(m => settledMemberIds?.has(m.id)).map(m => m.id))
   })
   const [isManualSplit, setIsManualSplit] = useState(!!editExpense)
   const [focusedOrderedId, setFocusedOrderedId] = useState<string | null>(null)

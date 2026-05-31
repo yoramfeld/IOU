@@ -7,7 +7,7 @@ import { useSession } from '@/hooks/useSession'
 import BottomNav from '@/components/ui/BottomNav'
 import SettlementList from '@/components/settle/SettlementList'
 import { calculateSettlements } from '@/lib/settle'
-import type { MemberBalance, Transfer } from '@/types'
+import type { MemberBalance, Transfer, Expense, ExpenseSplit, ExpensePayer } from '@/types'
 
 export default function SettlePage() {
   const router = useRouter()
@@ -18,9 +18,30 @@ export default function SettlePage() {
   const fetchAndSettle = useCallback(async () => {
     if (!session) return
     try {
-      const res = await fetch(`/api/balances?groupId=${session.groupId}&_t=${Date.now()}`)
-      if (res.ok) {
-        const balances: MemberBalance[] = await res.json()
+      const t = Date.now()
+      const [balRes, expRes] = await Promise.all([
+        fetch(`/api/balances?groupId=${session.groupId}&_t=${t}`),
+        fetch(`/api/expenses?groupId=${session.groupId}&_t=${t}`),
+      ])
+      if (balRes.ok && expRes.ok) {
+        const apiBalances: MemberBalance[] = await balRes.json()
+        const apiExpenses: (Expense & { splits: ExpenseSplit[]; payers: ExpensePayer[] })[] = await expRes.json()
+        // Recompute balances from expenses (same as Board) to avoid stale snapshot from non-atomic inserts
+        const paidBy: Record<string, number> = {}
+        const owedBy: Record<string, number> = {}
+        for (const exp of apiExpenses) {
+          for (const p of exp.payers ?? []) paidBy[p.member_id] = (paidBy[p.member_id] ?? 0) + Number(p.amount)
+          for (const s of exp.splits ?? []) owedBy[s.member_id] = (owedBy[s.member_id] ?? 0) + Number(s.amount)
+        }
+        const recomputed = apiBalances.map(b => ({
+          ...b,
+          total_paid: paidBy[b.id] ?? 0,
+          total_owed: owedBy[b.id] ?? 0,
+          balance: b.starting_balance + (paidBy[b.id] ?? 0) + (owedBy[b.id] ?? 0),
+        }))
+        setTransfers(calculateSettlements(recomputed))
+      } else if (balRes.ok) {
+        const balances: MemberBalance[] = await balRes.json()
         setTransfers(calculateSettlements(balances))
       }
     } finally {

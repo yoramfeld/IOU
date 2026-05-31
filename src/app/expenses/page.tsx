@@ -135,6 +135,22 @@ export default function ExpensesPage() {
     return { payerBalances: map, memberBalances: { ...balances } }
   }, [expenses, members])
 
+  // Members who have ~0 balance AND participated in at least one settlement
+  const settledMemberIds = useMemo(() => {
+    const inSettlement = new Set<string>()
+    for (const exp of expenses) {
+      if (!exp.description.startsWith('⚡ Settlement:')) continue
+      const effectivePayers = exp.payers?.length ? exp.payers : [{ member_id: exp.paid_by, amount: exp.amount }]
+      for (const p of effectivePayers) inSettlement.add(p.member_id)
+      for (const s of exp.splits) inSettlement.add(s.member_id)
+    }
+    return new Set(
+      Object.entries(memberBalances)
+        .filter(([id, bal]) => Math.abs(bal) < 0.01 && inSettlement.has(id))
+        .map(([id]) => id)
+    )
+  }, [expenses, memberBalances])
+
   if (loading || !adminLoaded) {
     return <div className="phone-frame flex items-center justify-center min-h-dvh text-ink-muted">Loading...</div>
   }
@@ -215,6 +231,7 @@ export default function ExpensesPage() {
           isAdmin={session.isAdmin && adminMode}
           currency={session.currency}
           memberBalances={memberBalances}
+          settledMemberIds={settledMemberIds}
           editExpense={editingExpense ? {
             description: editingExpense.description,
             amount: Number(editingExpense.amount),
