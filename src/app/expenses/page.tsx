@@ -11,8 +11,7 @@ import ExpenseList from '@/components/expenses/ExpenseList'
 import AddExpenseModal from '@/components/expenses/AddExpenseModal'
 import QRModal from '@/components/ui/QRModal'
 import SettleModal from '@/components/settle/SettleModal'
-import { calculateSettlements } from '@/lib/settle'
-import type { Expense, ExpensePayer, ExpenseSplit, Member, MemberBalance, Transfer } from '@/types'
+import type { Expense, ExpensePayer, ExpenseSplit, Member } from '@/types'
 
 export default function ExpensesPage() {
   const router = useRouter()
@@ -23,7 +22,6 @@ export default function ExpensesPage() {
   const [showModal, setShowModal] = useState(false)
   const [showQRModal, setShowQRModal] = useState(false)
   const [showSettleModal, setShowSettleModal] = useState(false)
-  const [settleTransfers, setSettleTransfers] = useState<Transfer[]>([])
   const [editingExpense, setEditingExpense] = useState<(Expense & { splits: ExpenseSplit[]; payers?: ExpensePayer[] }) | null>(null)
   const [loadingData, setLoadingData] = useState(true)
 
@@ -107,52 +105,25 @@ export default function ExpensesPage() {
     setShowModal(true)
   }
 
-  async function openSettleModal() {
+  async function handleConfirmSettlement(fromId: string, amount: number) {
     if (!session) return
-    setShowSettleModal(true)
-    const t = Date.now()
-    const [balRes, expRes] = await Promise.all([
-      fetch(`/api/balances?groupId=${session.groupId}&_t=${t}`),
-      fetch(`/api/expenses?groupId=${session.groupId}&_t=${t}`),
-    ])
-    if (balRes.ok && expRes.ok) {
-      const apiBalances: MemberBalance[] = await balRes.json()
-      const apiExpenses: (Expense & { splits: ExpenseSplit[]; payers: ExpensePayer[] })[] = await expRes.json()
-      const paidBy: Record<string, number> = {}
-      const owedBy: Record<string, number> = {}
-      for (const exp of apiExpenses) {
-        for (const p of exp.payers ?? []) paidBy[p.member_id] = (paidBy[p.member_id] ?? 0) + Number(p.amount)
-        for (const s of exp.splits ?? []) owedBy[s.member_id] = (owedBy[s.member_id] ?? 0) + Number(s.amount)
-      }
-      const recomputed = apiBalances.map(b => ({
-        ...b,
-        total_paid: paidBy[b.id] ?? 0,
-        total_owed: owedBy[b.id] ?? 0,
-        balance: b.starting_balance + (paidBy[b.id] ?? 0) + (owedBy[b.id] ?? 0),
-      }))
-      const all = calculateSettlements(recomputed)
-      setSettleTransfers(all.filter(t => t.to === session.memberId))
-    }
-  }
-
-  async function handleConfirmSettlement(transfer: Transfer) {
-    if (!session) return
+    const fromMember = members.find(m => m.id === fromId)
+    const me = members.find(m => m.id === session.memberId)
     const res = await fetch('/api/expenses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         groupId: session.groupId,
-        paidBy: transfer.from,
-        amount: transfer.amount,
-        description: `⚡ Settlement: ${transfer.fromName} → ${transfer.toName}`,
-        splitAmong: [transfer.to],
+        paidBy: fromId,
+        amount,
+        description: `⚡ Settlement: ${fromMember?.name} → ${me?.name}`,
+        splitAmong: [session.memberId],
         enteredBy: session.memberId,
-        payers: [{ memberId: transfer.from, amount: transfer.amount }],
+        payers: [{ memberId: fromId, amount }],
       }),
     })
     if (!res.ok) throw new Error('Failed')
     await fetchData()
-    await openSettleModal()
   }
 
   // Compute running balance per member: each card shows the payer's balance *after* that expense
@@ -214,17 +185,15 @@ export default function ExpensesPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {(memberBalances[session.memberId] ?? 0) > 0.01 && (
-              <button
-                onClick={openSettleModal}
-                className="w-10 h-10 border border-border rounded-full flex items-center justify-center text-ink-soft hover:bg-surface"
-                title="Settle up"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2v20M2 12h20M17 7l-5-5-5 5M7 17l5 5 5-5"/>
-                </svg>
-              </button>
-            )}
+            <button
+              onClick={() => setShowSettleModal(true)}
+              className="w-10 h-10 border border-border rounded-full flex items-center justify-center text-ink-soft hover:bg-surface"
+              title="Record incoming payment"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2v20M2 12h20M17 7l-5-5-5 5M7 17l5 5 5-5"/>
+              </svg>
+            </button>
             <button
               onClick={() => setShowQRModal(true)}
               className="w-10 h-10 border border-border rounded-full flex items-center justify-center text-ink-soft hover:bg-surface"
@@ -301,8 +270,7 @@ export default function ExpensesPage() {
 
       {showSettleModal && (
         <SettleModal
-          transfers={settleTransfers}
-          members={members}
+          members={members.filter(m => m.id !== session.memberId)}
           currency={session.currency}
           onConfirm={handleConfirmSettlement}
           onClose={() => setShowSettleModal(false)}

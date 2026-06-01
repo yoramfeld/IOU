@@ -53,7 +53,7 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onEdi
           <div className="min-w-0 flex-1">
             {isSettlement ? (
               <>
-                <p className="font-semibold text-sm">Settlement</p>
+                <p className="font-semibold text-sm">Transfer</p>
                 {(expense.payers ?? [{ member_id: expense.paid_by, amount: expense.amount }]).map(p => {
                   const m = members.find(x => x.id === p.member_id)
                   const bal = payerBalances?.[p.member_id]

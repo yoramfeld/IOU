@@ -1,29 +1,34 @@
 'use client'
 
 import { useState } from 'react'
-import type { Transfer, Member } from '@/types'
-import MemberAvatar from '@/components/ui/MemberAvatar'
+import type { Member } from '@/types'
 
 interface Props {
-  transfers: Transfer[]
   members: Member[]
   currency: string
-  onConfirm: (transfer: Transfer) => Promise<void>
+  onConfirm: (fromId: string, amount: number) => Promise<void>
   onClose: () => void
 }
 
-export default function SettleModal({ transfers, members, currency, onConfirm, onClose }: Props) {
-  const [submitting, setSubmitting] = useState<Record<string, boolean>>({})
-  const [error, setError] = useState<Record<string, string>>({})
+export default function SettleModal({ members, currency, onConfirm, onClose }: Props) {
+  const [fromId, setFromId] = useState(members[0]?.id ?? '')
+  const [amount, setAmount] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
 
-  async function handleConfirm(t: Transfer) {
-    setSubmitting(prev => ({ ...prev, [t.from]: true }))
-    setError(prev => ({ ...prev, [t.from]: '' }))
+  const parsed = parseFloat(amount)
+  const canSubmit = fromId && parsed > 0 && !submitting
+
+  async function handleSubmit() {
+    if (!canSubmit) return
+    setSubmitting(true)
+    setError('')
     try {
-      await onConfirm(t)
+      await onConfirm(fromId, parsed)
+      onClose()
     } catch {
-      setError(prev => ({ ...prev, [t.from]: 'Failed, try again' }))
-      setSubmitting(prev => ({ ...prev, [t.from]: false }))
+      setError('Failed to record. Try again.')
+      setSubmitting(false)
     }
   }
 
@@ -31,38 +36,49 @@ export default function SettleModal({ transfers, members, currency, onConfirm, o
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center">
       <div className="bg-white rounded-t-2xl w-full max-w-sm p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">Settle up</h2>
+          <h2 className="text-lg font-bold">Record incoming payment</h2>
           <button onClick={onClose} className="text-ink-muted text-xl leading-none">&times;</button>
         </div>
 
-        {transfers.length === 0 ? (
-          <div className="py-10 text-center space-y-2">
-            <p className="text-3xl">✓</p>
-            <p className="font-semibold text-ink">You&apos;re all settled up</p>
-            <p className="text-sm text-ink-muted">No one owes you anything right now.</p>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-ink-soft block mb-1">Received from</label>
+            <select
+              className="input"
+              value={fromId}
+              onChange={e => setFromId(e.target.value)}
+            >
+              {members.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
           </div>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-ink-muted">Confirm when you&apos;ve received a payment:</p>
-            {transfers.map(t => (
-              <div key={t.from} className="flex items-center gap-3">
-                <MemberAvatar name={t.fromName} />
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm truncate">{t.fromName}</p>
-                  <p className="text-xs text-ink-muted">owes you {currency}{t.amount.toFixed(2)}</p>
-                  {error[t.from] && <p className="text-xs text-red">{error[t.from]}</p>}
-                </div>
-                <button
-                  onClick={() => handleConfirm(t)}
-                  disabled={submitting[t.from]}
-                  className="btn btn-outline text-xs py-1.5 px-3 shrink-0 disabled:opacity-50"
-                >
-                  {submitting[t.from] ? 'Saving…' : 'Received'}
-                </button>
-              </div>
-            ))}
+
+          <div>
+            <label className="text-xs font-medium text-ink-soft block mb-1">Amount ({currency})</label>
+            <input
+              className="input"
+              type="number"
+              step="any"
+              min="0"
+              placeholder="0.00"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              onFocus={e => e.target.select()}
+              autoFocus
+            />
           </div>
-        )}
+
+          {error && <p className="text-xs text-red">{error}</p>}
+
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className="btn btn-primary w-full disabled:opacity-50"
+          >
+            {submitting ? 'Saving…' : 'Record payment'}
+          </button>
+        </div>
       </div>
     </div>
   )
