@@ -165,6 +165,16 @@ export default function BoardPage() {
     setTimeout(() => setExportState('idle'), 2000)
   }
 
+  async function handleLeave(memberId: string) {
+    if (!session) return
+    await fetch('/api/members', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'leave', memberId, requesterId: session.memberId }),
+    })
+    await fetchBalances()
+  }
+
   async function handleRenameMember(memberId: string, newName: string) {
     if (!session) return
     await fetch('/api/members', {
@@ -254,6 +264,7 @@ export default function BoardPage() {
             currency={session.currency}
             currentMemberId={session.memberId}
             isAdmin={session.isAdmin && adminMode}
+            onLeave={handleLeave}
             onRenameMember={session.isAdmin && adminMode ? handleRenameMember : undefined}
             onRemoveMember={handleRemoveMember}
           />

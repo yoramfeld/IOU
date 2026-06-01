@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   }
 
   const [members, splits, payers] = await Promise.all([
-    sql`SELECT id, name, is_admin, group_id, starting_balance FROM members WHERE group_id = ${groupId}`,
+    sql`SELECT id, name, is_admin, is_left, group_id, starting_balance FROM members WHERE group_id = ${groupId}`,
     sql`SELECT es.member_id, es.amount FROM expense_splits es
         JOIN expenses e ON e.id = es.expense_id
         WHERE e.group_id = ${groupId}`,
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     owedByMember[s.member_id] = (owedByMember[s.member_id] || 0) + Number(s.amount)
   }
 
-  const balances = (members as { id: string; name: string; is_admin: boolean; group_id: string; starting_balance: string | number }[]).map(m => {
+  const balances = (members as { id: string; name: string; is_admin: boolean; is_left: boolean; group_id: string; starting_balance: string | number }[]).map(m => {
     const startBal = Number(m.starting_balance || 0)
     const paid = paidByMember[m.id] || 0
     const owed = owedByMember[m.id] || 0
@@ -43,6 +43,7 @@ export async function GET(request: Request) {
       id: m.id,
       name: m.name,
       is_admin: m.is_admin,
+      is_left: m.is_left,
       group_id: m.group_id,
       starting_balance: startBal,
       total_paid: paid,

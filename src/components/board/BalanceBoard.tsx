@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import type { MemberBalance, Expense, ExpenseSplit, ExpensePayer } from '@/types'
 import MemberAvatar from '@/components/ui/MemberAvatar'
+import { calculateSettlements } from '@/lib/settle'
 import clsx from 'clsx'
 
 interface Props {
@@ -13,9 +14,10 @@ interface Props {
   isAdmin?: boolean
   onRenameMember?: (id: string, newName: string) => void
   onRemoveMember?: (id: string) => void
+  onLeave?: (id: string) => void
 }
 
-export default function BalanceBoard({ balances, expenses, currency, currentMemberId, isAdmin, onRenameMember, onRemoveMember }: Props) {
+export default function BalanceBoard({ balances, expenses, currency, currentMemberId, isAdmin, onRenameMember, onRemoveMember, onLeave }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   if (balances.length === 0) {
     return (
@@ -42,20 +44,9 @@ export default function BalanceBoard({ balances, expenses, currency, currentMemb
   const total = Math.round(balances.reduce((s, b) => s + Number(b.balance), 0) * 100) / 100
   const totalPaid = Math.round(balances.reduce((s, b) => s + Number(b.total_paid), 0) * 100) / 100
 
-  // Members who reached ~0 balance via a settlement
-  const settledIds = new Set<string>()
-  if (expenses) {
-    const inSettlement = new Set<string>()
-    for (const exp of expenses) {
-      if (!exp.description.startsWith('⚡ Settlement:')) continue
-      const effectivePayers = exp.payers?.length ? exp.payers : [{ member_id: exp.paid_by, amount: exp.amount }]
-      for (const p of effectivePayers) inSettlement.add(p.member_id)
-      for (const s of exp.splits) inSettlement.add(s.member_id)
-    }
-    for (const b of balances) {
-      if (Math.abs(Number(b.balance)) < 0.01 && inSettlement.has(b.id)) settledIds.add(b.id)
-    }
-  }
+  // Members with pending settlement actions (used to gate the Leave button)
+  const pendingTransfers = calculateSettlements(balances)
+  const activeIds = new Set(pendingTransfers.flatMap(t => [t.from, t.to]))
 
   return (
     <div className="space-y-2">
@@ -63,8 +54,8 @@ export default function BalanceBoard({ balances, expenses, currency, currentMemb
         const bal = Number(b.balance)
         const isPositive = bal > 0.01
         const isNegative = bal < -0.01
-        const isSettled = settledIds.has(b.id)
         const isMe = b.id === currentMemberId
+        const canLeave = onLeave && !b.is_left && !activeIds.has(b.id) && (isMe || isAdmin)
         const isTopDebtor = minBalKey !== null && bal.toFixed(2) === minBalKey
 
         const isExpanded = expandedId === b.id
@@ -101,7 +92,7 @@ export default function BalanceBoard({ balances, expenses, currency, currentMemb
         return (
           <div key={b.id} className={clsx(
             'card',
-            isSettled && !isMe && 'opacity-40',
+            b.is_left && 'opacity-40',
             isMe && 'ring-2 ring-accent/20',
             isPositive && 'bg-green/5',
             isTopDebtor && 'bg-red/5 ring-1 ring-red/20',
@@ -149,6 +140,14 @@ export default function BalanceBoard({ balances, expenses, currency, currentMemb
                   <p className="text-xs text-ink-muted">
                     paid {currency}{Number(b.total_paid).toFixed(2)}
                   </p>
+                )}
+                {canLeave && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onLeave(b.id) }}
+                    className="text-xs text-ink-muted hover:text-red hover:underline mt-1 block"
+                  >
+                    Leave
+                  </button>
                 )}
                 {isAdmin && onRemoveMember && b.id !== currentMemberId && (
                   <button

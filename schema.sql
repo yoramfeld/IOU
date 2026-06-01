@@ -17,10 +17,12 @@ create table members (
   group_id      uuid not null references groups(id) on delete cascade,
   name          text not null,
   is_admin      boolean not null default false,
+  is_left       boolean not null default false,
   password_hash    text,
   starting_balance numeric(10,2) not null default 0,
   created_at       timestamptz not null default now()
 );
+-- Migration: alter table members add column if not exists is_left boolean not null default false;
 create unique index members_name_group_unique on members (group_id, lower(name));
 
 -- Expenses

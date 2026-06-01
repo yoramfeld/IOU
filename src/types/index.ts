@@ -12,6 +12,7 @@ export interface Member {
   group_id: string
   name: string
   is_admin: boolean
+  is_left: boolean
   starting_balance?: number
   created_at: string
 }
@@ -47,6 +48,7 @@ export interface MemberBalance {
   id: string
   name: string
   is_admin: boolean
+  is_left: boolean
   group_id: string
   starting_balance: number
   total_paid: number

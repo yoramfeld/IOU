@@ -160,6 +160,12 @@ export async function POST(request: Request) {
     }
   }
 
+  // Auto-rejoin any left members who appear in this expense
+  const allMemberIds = Array.from(new Set([...resolvedPayers.map(p => p.memberId), ...splits.map(s => s.memberId)]))
+  for (const id of allMemberIds) {
+    await sql`UPDATE members SET is_left = false WHERE id = ${id} AND is_left = true`
+  }
+
   return NextResponse.json({ ok: true })
 }
 
@@ -283,6 +289,12 @@ export async function PUT(request: Request) {
       INSERT INTO expense_splits (expense_id, member_id, amount)
       VALUES (${expenseId}, ${s.memberId}, ${s.amount})
     `
+  }
+
+  // Auto-rejoin any left members who appear in this expense
+  const allMemberIds = Array.from(new Set([...resolvedPayers.map((p: { memberId: string }) => p.memberId), ...splits.map((s: { memberId: string }) => s.memberId)]))
+  for (const id of allMemberIds) {
+    await sql`UPDATE members SET is_left = false WHERE id = ${id} AND is_left = true`
   }
 
   return NextResponse.json({ ok: true })
