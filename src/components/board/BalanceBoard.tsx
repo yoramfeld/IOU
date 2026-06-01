@@ -28,17 +28,18 @@ export default function BalanceBoard({ balances, expenses, currency, currentMemb
     )
   }
 
-  // Sort by balance ascending, then name ascending
-  const sorted = [...balances].sort((a, b) => {
+  const sortFn = (a: MemberBalance, b: MemberBalance) => {
     const diff = Number(a.balance) - Number(b.balance)
     return diff !== 0 ? diff : a.name.localeCompare(b.name)
-  })
+  }
+  const activeMembers = [...balances].filter(b => !b.is_left).sort(sortFn)
+  const leftMembers  = [...balances].filter(b =>  b.is_left).sort(sortFn)
 
-  // Find the lowest (most negative) balance — highlight all members who share it
-  const minBal = sorted.length > 0 ? Number(sorted[0].balance) : 0
+  // Find the lowest (most negative) balance among active members only
+  const minBal = activeMembers.length > 0 ? Number(activeMembers[0].balance) : 0
   const minBalKey = minBal < -0.01 ? minBal.toFixed(2) : null
   const minCount = minBalKey
-    ? sorted.filter(b => Number(b.balance).toFixed(2) === minBalKey).length
+    ? activeMembers.filter(b => Number(b.balance).toFixed(2) === minBalKey).length
     : 0
 
   const total = Math.round(balances.reduce((s, b) => s + Number(b.balance), 0) * 100) / 100
@@ -48,9 +49,7 @@ export default function BalanceBoard({ balances, expenses, currency, currentMemb
   const pendingTransfers = calculateSettlements(balances)
   const activeIds = new Set(pendingTransfers.flatMap(t => [t.from, t.to]))
 
-  return (
-    <div className="space-y-2">
-      {sorted.map(b => {
+  const renderCard = (b: MemberBalance) => {
         const bal = Number(b.balance)
         const isPositive = bal > 0.01
         const isNegative = bal < -0.01
@@ -186,7 +185,17 @@ export default function BalanceBoard({ balances, expenses, currency, currentMemb
             )}
           </div>
         )
-      })}
+  }
+
+  return (
+    <div className="space-y-2">
+      {activeMembers.map(renderCard)}
+      {leftMembers.length > 0 && (
+        <>
+          <p className="text-xs text-ink-muted pt-3 pb-1 border-t border-border">Left the group</p>
+          {leftMembers.map(renderCard)}
+        </>
+      )}
       <div className="text-center text-xs text-ink-muted pt-2 space-y-0.5">
         <div>Total: {currency}{total.toFixed(2)}</div>
         <div>Total paid: {currency}{totalPaid.toFixed(2)}</div>
