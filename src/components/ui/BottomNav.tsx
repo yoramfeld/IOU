@@ -13,7 +13,7 @@ interface Props {
 const NAV = [
   { key: 'expenses', href: '/expenses', label: 'Expenses', icon: '💰', hardNav: false },
   { key: 'board',    href: '/board',    label: 'Board',    icon: '📊', hardNav: true },
-  { key: 'settle',   href: '/settle',   label: 'Settle',   icon: '🤝', hardNav: true },
+  // { key: 'settle',   href: '/settle',   label: 'Settle',   icon: '🤝', hardNav: true },
   { key: 'settings', href: '/settings', label: 'Settings', icon: '⚙️', hardNav: false },
 ]
 
