@@ -13,7 +13,13 @@ export default function GroupHub() {
   const { sessions, switchGroup, logout } = useSession()
   const [mode, setMode] = useState<Mode>('hub')
   const [balances, setBalances] = useState<Record<string, number>>({})
-  const [leaveStages, setLeaveStages] = useState<Record<string, LeaveStage>>({})
+  const [leaveStages, setLeaveStages] = useState<Record<string, LeaveStage>>(() => {
+    try {
+      const saved = localStorage.getItem('iou_left_groups')
+      const ids: string[] = saved ? JSON.parse(saved) : []
+      return Object.fromEntries(ids.map(id => [id, 'left' as LeaveStage]))
+    } catch { return {} }
+  })
   const [inputValue, setInputValue] = useState('')
 
   const groupIds = sessions.map(s => s.groupId).join(',')
@@ -48,6 +54,9 @@ export default function GroupHub() {
     setLeaveStages(prev => {
       const next = { ...prev }
       if (stage === null) delete next[groupId]; else next[groupId] = stage
+      // Persist only 'left' entries
+      const leftIds = Object.entries(next).filter(([, s]) => s === 'left').map(([id]) => id)
+      try { localStorage.setItem('iou_left_groups', JSON.stringify(leftIds)) } catch {}
       return next
     })
     setInputValue('')
@@ -156,7 +165,7 @@ export default function GroupHub() {
                     />
                     <div className="flex items-center gap-3">
                       <button
-                        onClick={() => { logout(s.groupId); setStage(s.groupId, null) }}
+                        onClick={() => { setStage(s.groupId, null); logout(s.groupId) }}
                         disabled={inputValue !== 'Quit'}
                         className="btn bg-red text-white text-sm py-1.5 px-3 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
