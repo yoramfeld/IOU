@@ -6,16 +6,16 @@ import { useSession } from '@/hooks/useSession'
 import SignupGate from './SignupGate'
 
 type Mode = 'hub' | 'join' | 'create'
+type LeaveStage = 'confirming-leave' | 'left' | 'confirming-quit'
 
 export default function GroupHub() {
   const router = useRouter()
   const { sessions, switchGroup, logout } = useSession()
   const [mode, setMode] = useState<Mode>('hub')
   const [balances, setBalances] = useState<Record<string, number>>({})
-  const [leavingGroupId, setLeavingGroupId] = useState<string | null>(null)
-  const [leaveInput, setLeaveInput] = useState('')
+  const [leaveStages, setLeaveStages] = useState<Record<string, LeaveStage>>({})
+  const [inputValue, setInputValue] = useState('')
 
-  // Stable string dependency — sessions is a new array ref on every render
   const groupIds = sessions.map(s => s.groupId).join(',')
 
   useEffect(() => {
@@ -44,20 +44,13 @@ export default function GroupHub() {
     router.push('/expenses')
   }
 
-  function handleLeaveClick(groupId: string) {
-    setLeavingGroupId(groupId)
-    setLeaveInput('')
-  }
-
-  function handleLeaveCancel() {
-    setLeavingGroupId(null)
-    setLeaveInput('')
-  }
-
-  function handleLeaveConfirm(groupId: string) {
-    logout(groupId)
-    setLeavingGroupId(null)
-    setLeaveInput('')
+  function setStage(groupId: string, stage: LeaveStage | null) {
+    setLeaveStages(prev => {
+      const next = { ...prev }
+      if (stage === null) delete next[groupId]; else next[groupId] = stage
+      return next
+    })
+    setInputValue('')
   }
 
   if (mode === 'join') return <SignupGate initialStep="join" onBack={() => setMode('hub')} />
@@ -76,7 +69,7 @@ export default function GroupHub() {
             const bal = balances[s.groupId]
             const balLoaded = bal !== undefined
             const isZero = balLoaded && Math.abs(bal) < 0.01
-            const isLeaving = leavingGroupId === s.groupId
+            const stage = leaveStages[s.groupId] ?? null
             const currency = s.currency || 'USD'
             const fmt = (v: number) => {
               try {
@@ -88,61 +81,88 @@ export default function GroupHub() {
 
             return (
               <div key={s.groupId} className="border-2 border-green-500 rounded-xl overflow-hidden">
-                {!isLeaving ? (
-                  <div className="relative">
-                    <button
-                      onClick={() => handleEnter(s.groupId)}
-                      className="w-full text-left px-4 py-3 hover:bg-green-50 transition-colors"
-                    >
-                      <p className="font-semibold text-sm pr-12 truncate">{s.groupName}</p>
-                      <p className="text-xs text-ink-muted truncate">{s.name}</p>
-                      <p className={`text-xs mt-0.5 ${
-                        !balLoaded
-                          ? 'text-ink-muted'
-                          : bal > 0.005
-                          ? 'text-green-600'
-                          : bal < -0.005
-                          ? 'text-red'
-                          : 'text-ink-muted'
-                      }`}>
-                        {!balLoaded ? '—' : `${bal >= 0 ? '+' : ''}${fmt(bal)}`}
-                      </p>
-                    </button>
-                    {isZero && (
+                {/* Always-visible enter row */}
+                <div className="relative">
+                  <button
+                    onClick={() => handleEnter(s.groupId)}
+                    className="w-full text-left px-4 py-3 hover:bg-green-50 transition-colors"
+                  >
+                    <p className="font-semibold text-sm pr-24 truncate">{s.groupName}</p>
+                    <p className="text-xs text-ink-muted truncate">{s.name}</p>
+                    <p className={`text-xs mt-0.5 ${
+                      !balLoaded ? 'text-ink-muted'
+                      : bal > 0.005 ? 'text-green-600'
+                      : bal < -0.005 ? 'text-red'
+                      : 'text-ink-muted'
+                    }`}>
+                      {!balLoaded ? '—' : `${bal >= 0 ? '+' : ''}${fmt(bal)}`}
+                    </p>
+                  </button>
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {stage === null && isZero && (
                       <button
-                        onClick={() => handleLeaveClick(s.groupId)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-red border border-red rounded px-2 py-0.5 hover:bg-red hover:text-white transition-colors"
+                        onClick={(e) => { e.stopPropagation(); setStage(s.groupId, 'confirming-leave') }}
+                        className="text-xs text-red border border-red rounded px-2 py-0.5 hover:bg-red hover:text-white transition-colors"
                       >
                         Leave
                       </button>
                     )}
+                    {stage === 'left' && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setStage(s.groupId, 'confirming-quit') }}
+                        className="text-xs text-red border border-red rounded px-2 py-0.5 hover:bg-red hover:text-white transition-colors"
+                      >
+                        Quit
+                      </button>
+                    )}
                   </div>
-                ) : (
-                  <div className="px-4 py-3">
-                    <p className="font-semibold text-sm truncate mb-1">{s.groupName}</p>
-                    <p className="text-xs text-ink-muted mb-3">
-                      Your balance: {fmt(bal ?? 0)}
-                    </p>
+                </div>
+
+                {/* Confirmation panels */}
+                {stage === 'confirming-leave' && (
+                  <div className="px-4 pb-3 border-t border-border">
+                    <p className="text-xs text-ink-muted mt-2 mb-2">Type <strong>Leave</strong> to confirm</p>
                     <input
                       type="text"
-                      value={leaveInput}
-                      onChange={e => setLeaveInput(e.target.value)}
-                      placeholder='type "leave" to confirm'
+                      value={inputValue}
+                      onChange={e => setInputValue(e.target.value)}
                       className="input w-full mb-2 text-sm"
                       autoFocus
                     />
                     <div className="flex items-center gap-3">
                       <button
-                        onClick={() => handleLeaveConfirm(s.groupId)}
-                        disabled={leaveInput !== 'leave'}
+                        onClick={() => setStage(s.groupId, 'left')}
+                        disabled={inputValue !== 'Leave'}
                         className="btn bg-red text-white text-sm py-1.5 px-3 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        Leave group
+                        Confirm leave
                       </button>
+                      <button onClick={() => setStage(s.groupId, null)} className="text-xs text-ink-muted hover:text-ink">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {stage === 'confirming-quit' && (
+                  <div className="px-4 pb-3 border-t border-border">
+                    <p className="text-xs text-ink-muted mt-2 mb-2">Type <strong>Quit</strong> to remove this group</p>
+                    <input
+                      type="text"
+                      value={inputValue}
+                      onChange={e => setInputValue(e.target.value)}
+                      className="input w-full mb-2 text-sm"
+                      autoFocus
+                    />
+                    <div className="flex items-center gap-3">
                       <button
-                        onClick={handleLeaveCancel}
-                        className="text-xs text-ink-muted hover:text-ink"
+                        onClick={() => { logout(s.groupId); setStage(s.groupId, null) }}
+                        disabled={inputValue !== 'Quit'}
+                        className="btn bg-red text-white text-sm py-1.5 px-3 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
+                        Confirm quit
+                      </button>
+                      <button onClick={() => setStage(s.groupId, 'left')} className="text-xs text-ink-muted hover:text-ink">
                         Cancel
                       </button>
                     </div>
