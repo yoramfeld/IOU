@@ -364,21 +364,35 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
                   value={newTypeInput}
                   onChange={e => setNewTypeInput(e.target.value)}
                   onKeyDown={e => {
-                    if (e.key === 'Enter' && newTypeInput.trim()) {
-                      const t = newTypeInput.trim()
-                      const updated = [...customTypes, t]
-                      setCustomTypes(updated)
-                      saveCustomTypes(updated)
-                      setExpenseType(t)
-                      setNewTypeInput('')
-                      setAddingType(false)
-                    } else if (e.key === 'Escape') {
-                      setAddingType(false)
-                      setNewTypeInput('')
-                    }
+                    if (e.key === 'Enter') e.preventDefault()
+                    if (e.key === 'Escape') { setAddingType(false); setNewTypeInput('') }
                   }}
-                  onBlur={() => { setAddingType(false); setNewTypeInput('') }}
                 />
+                <button
+                  type="button"
+                  onMouseDown={e => {
+                    e.preventDefault()  // prevent input blur before save
+                    const t = newTypeInput.trim()
+                    if (!t) return
+                    const updated = [...customTypes, t]
+                    setCustomTypes(updated)
+                    saveCustomTypes(updated)
+                    setExpenseType(t)
+                    setNewTypeInput('')
+                    setAddingType(false)
+                  }}
+                  className="text-xs text-white bg-accent rounded-full px-2 py-1 disabled:opacity-40"
+                  disabled={!newTypeInput.trim()}
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); setAddingType(false); setNewTypeInput('') }}
+                  className="text-xs text-ink-muted"
+                >
+                  ✕
+                </button>
               </div>
             ) : (
               <button
