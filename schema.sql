@@ -33,13 +33,19 @@ create table expenses (
   amount      numeric(10,2) not null check (amount > 0),
   description text not null,
   entered_by  uuid not null references members(id) on delete cascade,
-  receipt_url text,
-  rating      smallint check (rating >= 1 and rating <= 5),
-  created_at  timestamptz not null default now()
+  receipt_url  text,
+  rating       smallint check (rating >= 1 and rating <= 5),
+  expense_type text,
+  lat          numeric(10,6),
+  lng          numeric(10,6),
+  created_at   timestamptz not null default now()
 );
 -- Migration (run once on existing DB):
 -- alter table expenses add column if not exists receipt_url text;
 -- alter table expenses add column if not exists rating smallint check (rating >= 1 and rating <= 5);
+-- alter table expenses add column if not exists expense_type text;
+-- alter table expenses add column if not exists lat numeric(10,6);
+-- alter table expenses add column if not exists lng numeric(10,6);
 
 -- Expense payers (multi-payer support)
 create table expense_payers (

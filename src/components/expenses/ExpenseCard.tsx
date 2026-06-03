@@ -4,18 +4,25 @@ import { useState } from 'react'
 import type { Expense, ExpensePayer, ExpenseSplit, Member } from '@/types'
 import MemberAvatar from '@/components/ui/MemberAvatar'
 
+const EDIT_WINDOW_MS = 2 * 60 * 60 * 1000  // 2 hours
+
 interface Props {
   expense: Expense & { splits: ExpenseSplit[]; payers?: ExpensePayer[] }
   members: Member[]
   currency: string
   isAdmin?: boolean
+  currentMemberId?: string
   onEdit?: (expense: Expense & { splits: ExpenseSplit[]; payers?: ExpensePayer[] }) => void
   onDelete?: (id: string) => void
   payerBalances?: Record<string, number>
 }
 
-export default function ExpenseCard({ expense, members, currency, isAdmin, onEdit, onDelete, payerBalances }: Props) {
+export default function ExpenseCard({ expense, members, currency, isAdmin, currentMemberId, onEdit, onDelete, payerBalances }: Props) {
   const [showReceipt, setShowReceipt] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
+  const isEnteredByMe = currentMemberId === expense.entered_by
+  const withinEditWindow = Date.now() - new Date(expense.created_at).getTime() < EDIT_WINDOW_MS
+  const canEdit = !!onEdit && (isAdmin || (isEnteredByMe && withinEditWindow))
   const payer = members.find(m => m.id === expense.paid_by)
   const enteredBy = members.find(m => m.id === expense.entered_by)
   const isMultiPayer = (expense.payers?.length ?? 0) > 1
@@ -46,7 +53,7 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onEdi
   const dateStr = `${dt.getDate()}/${dt.getMonth() + 1} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
 
   return (
-    <div className="card">
+    <div className="card cursor-pointer" onClick={() => setShowDetails(true)}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           {payer && <MemberAvatar name={payer.name} />}
@@ -101,19 +108,19 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onEdi
         </div>
         <div className="text-right shrink-0">
           <p className="font-bold text-sm">{currency}{Math.round(Number(expense.amount))}</p>
-          {isAdmin && (onEdit || onDelete) && (
+          {(canEdit || (isAdmin && onDelete)) && (
             <div className="flex gap-2 mt-1">
-              {onEdit && (
+              {canEdit && (
                 <button
-                  onClick={() => onEdit(expense)}
+                  onClick={e => { e.stopPropagation(); onEdit!(expense) }}
                   className="text-xs text-accent hover:underline"
                 >
                   Edit
                 </button>
               )}
-              {onDelete && (
+              {isAdmin && onDelete && (
                 <button
-                  onClick={() => onDelete(expense.id)}
+                  onClick={e => { e.stopPropagation(); onDelete(expense.id) }}
                   className="text-xs text-red hover:underline"
                 >
                   Delete
@@ -126,6 +133,24 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onEdi
       <div className="flex items-end justify-between mt-2 gap-2">
         <div className="flex items-center gap-2">
           <p className="text-xs text-ink-muted whitespace-nowrap overflow-hidden">{dateStr}</p>
+          {expense.expense_type && (
+            <span className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full shrink-0">{expense.expense_type}</span>
+          )}
+          {expense.lat != null && expense.lng != null && (
+            <a
+              href={`https://maps.google.com/?q=${expense.lat},${expense.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="text-ink-muted hover:text-accent transition-colors"
+              title="View on map"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                <circle cx="12" cy="9" r="2.5"/>
+              </svg>
+            </a>
+          )}
           {expense.rating != null && expense.rating > 0 && (
             <div className="flex items-center gap-0.5">
               {[1,2,3,4,5].map(star => (
@@ -140,7 +165,7 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onEdi
           )}
           {expense.receipt_url && (
             <button
-              onClick={() => setShowReceipt(true)}
+              onClick={e => { e.stopPropagation(); setShowReceipt(true) }}
               className="text-ink-muted hover:text-accent transition-colors"
               title="View receipt"
             >
@@ -182,6 +207,91 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onEdi
             className="max-w-full max-h-full object-contain rounded-lg"
             onClick={e => e.stopPropagation()}
           />
+        </div>
+      )}
+      {showDetails && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center"
+          onClick={() => setShowDetails(false)}
+        >
+          <div
+            className="bg-white rounded-t-2xl w-full max-w-sm p-5 space-y-4 max-h-[80dvh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold">{isSettlement ? 'Transfer' : expense.description}</h2>
+                <p className="text-xs text-ink-muted">
+                  {dt.getDate()}/{dt.getMonth()+1}/{dt.getFullYear()} {String(dt.getHours()).padStart(2,'0')}:{String(dt.getMinutes()).padStart(2,'0')}
+                </p>
+              </div>
+              <button onClick={() => setShowDetails(false)} className="text-ink-muted text-xl leading-none shrink-0">&times;</button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-bold">{currency}{Number(expense.amount).toFixed(2)}</span>
+              {expense.expense_type && (
+                <span className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full">{expense.expense_type}</span>
+              )}
+              {expense.rating != null && expense.rating > 0 && (
+                <div className="flex gap-0.5">
+                  {[1,2,3,4,5].map(s => (
+                    <svg key={s} width="14" height="14" viewBox="0 0 24 24"
+                      fill={s <= expense.rating! ? '#f59e0b' : 'none'}
+                      stroke={s <= expense.rating! ? '#f59e0b' : '#d1d5db'} strokeWidth="1.5">
+                      <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+                    </svg>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-ink-soft uppercase tracking-wide">Paid by</p>
+              {(expense.payers ?? [{ member_id: expense.paid_by, amount: expense.amount }]).map(p => {
+                const m = members.find(x => x.id === p.member_id)
+                return (
+                  <div key={p.member_id} className="flex items-center gap-2">
+                    {m && <MemberAvatar name={m.name} />}
+                    <span className="text-sm flex-1">{m?.name ?? '?'}</span>
+                    <span className="text-sm font-semibold text-green">{currency}{Number(p.amount).toFixed(2)}</span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {!isSettlement && splitPairs.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-ink-soft uppercase tracking-wide">Split among</p>
+                {splitPairs.map(({ member: m, amount }) => (
+                  <div key={m.id} className="flex items-center gap-2">
+                    <MemberAvatar name={m.name} />
+                    <span className="text-sm flex-1">{m.name}</span>
+                    <span className="text-sm font-semibold text-red">{currency}{Math.abs(Number(amount)).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {onBehalf && enteredBy && (
+              <p className="text-xs text-ink-muted">Entered by {enteredBy.name}</p>
+            )}
+
+            {expense.lat != null && expense.lng != null && (
+              <a
+                href={`https://maps.google.com/?q=${expense.lat},${expense.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-accent"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                  <circle cx="12" cy="9" r="2.5"/>
+                </svg>
+                View on map
+              </a>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy, payers, receiptUrl, rating } = await request.json()
+  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy, payers, receiptUrl, rating, expenseType, lat, lng } = await request.json()
 
   const hasCustom = Array.isArray(customSplits) && customSplits.length > 0
   if (!groupId || !paidBy || !amount || !description?.trim() || !enteredBy) {
@@ -62,8 +62,8 @@ export async function POST(request: Request) {
 
   // Create expense (paid_by = primary payer for display)
   const expenseRows = await sql`
-    INSERT INTO expenses (group_id, paid_by, amount, description, entered_by, receipt_url, rating)
-    VALUES (${groupId}, ${resolvedPayers[0].memberId}, ${Number(amount)}, ${description.trim()}, ${enteredBy}, ${receiptUrl ?? null}, ${rating ?? null})
+    INSERT INTO expenses (group_id, paid_by, amount, description, entered_by, receipt_url, rating, expense_type, lat, lng)
+    VALUES (${groupId}, ${resolvedPayers[0].memberId}, ${Number(amount)}, ${description.trim()}, ${enteredBy}, ${receiptUrl ?? null}, ${rating ?? null}, ${expenseType ?? null}, ${lat ?? null}, ${lng ?? null})
     RETURNING id
   `
   const expense = expenseRows[0]
@@ -170,27 +170,35 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const { expenseId, adminId, description, amount, payers, splitAmong, customSplits, rating } = await request.json()
+  const { expenseId, adminId, requesterId: reqId, description, amount, payers, splitAmong, customSplits, rating, expenseType } = await request.json()
+  const requesterId = reqId ?? adminId  // backward compat
 
-  if (!expenseId || !adminId || !description?.trim() || !amount) {
+  if (!expenseId || !requesterId || !description?.trim() || !amount) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   }
   if (amount <= 0) {
     return NextResponse.json({ error: 'Amount must be positive' }, { status: 400 })
   }
 
-  // Verify admin
-  const adminRows = await sql`SELECT is_admin, group_id FROM members WHERE id = ${adminId} LIMIT 1`
-  const admin = adminRows[0]
-  if (!admin?.is_admin) {
-    return NextResponse.json({ error: 'Only admins can edit expenses' }, { status: 403 })
-  }
+  const EDIT_WINDOW_MS = 2 * 60 * 60 * 1000  // 2 hours
+
+  // Verify requester exists
+  const requesterRows = await sql`SELECT is_admin, group_id FROM members WHERE id = ${requesterId} LIMIT 1`
+  const requester = requesterRows[0]
+  if (!requester) return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
 
   // Verify expense exists and belongs to the same group
-  const expenseRows = await sql`SELECT id, group_id FROM expenses WHERE id = ${expenseId} LIMIT 1`
+  const expenseRows = await sql`SELECT id, group_id, entered_by, created_at FROM expenses WHERE id = ${expenseId} LIMIT 1`
   const expense = expenseRows[0]
-  if (!expense || expense.group_id !== admin.group_id) {
+  if (!expense || expense.group_id !== requester.group_id) {
     return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
+  }
+
+  // Authorization: admin always allowed; entered_by allowed within edit window
+  const isEnteredBy = expense.entered_by === requesterId
+  const withinWindow = Date.now() - new Date(expense.created_at).getTime() < EDIT_WINDOW_MS
+  if (!requester.is_admin && !(isEnteredBy && withinWindow)) {
+    return NextResponse.json({ error: 'Edit window has passed' }, { status: 403 })
   }
 
   const groupId = expense.group_id
@@ -205,7 +213,7 @@ export async function PUT(request: Request) {
 
   // Update the expense row
   await sql`
-    UPDATE expenses SET description = ${description.trim()}, amount = ${Number(amount)}, paid_by = ${resolvedPayers[0].memberId}, rating = ${rating ?? null}
+    UPDATE expenses SET description = ${description.trim()}, amount = ${Number(amount)}, paid_by = ${resolvedPayers[0].memberId}, rating = ${rating ?? null}, expense_type = ${expenseType ?? null}
     WHERE id = ${expenseId}
   `
 

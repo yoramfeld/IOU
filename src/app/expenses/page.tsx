@@ -48,7 +48,7 @@ export default function ExpensesPage() {
     if (session) fetchData()
   }, [session, loading, router, fetchData])
 
-  async function handleAddExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[]; receiptUrl?: string; rating?: number }) {
+  async function handleAddExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[]; receiptUrl?: string; rating?: number; expenseType?: string; lat?: number; lng?: number }) {
     if (!session) return
     const res = await fetch('/api/expenses', {
       method: 'POST',
@@ -64,6 +64,9 @@ export default function ExpensesPage() {
         enteredBy: session.memberId,
         receiptUrl: data.receiptUrl,
         rating: data.rating,
+        expenseType: data.expenseType,
+        lat: data.lat,
+        lng: data.lng,
       }),
     })
     if (!res.ok) throw new Error('Failed')
@@ -80,20 +83,21 @@ export default function ExpensesPage() {
     await fetchData()
   }
 
-  async function handleEditExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[]; rating?: number }) {
+  async function handleEditExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[]; rating?: number; expenseType?: string }) {
     if (!session || !editingExpense) return
     const res = await fetch('/api/expenses', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         expenseId: editingExpense.id,
-        adminId: session.memberId,
+        requesterId: session.memberId,
         description: data.description,
         amount: data.amount,
         payers: data.payers,
         splitAmong: data.splitAmong,
         customSplits: data.customSplits,
         rating: data.rating,
+        expenseType: data.expenseType,
       }),
     })
     if (!res.ok) throw new Error('Failed')
@@ -233,7 +237,8 @@ export default function ExpensesPage() {
             members={members}
             currency={session.currency}
             isAdmin={session.isAdmin && adminMode}
-            onEdit={session.isAdmin && adminMode ? startEditExpense : undefined}
+            currentMemberId={session.memberId}
+            onEdit={startEditExpense}
             onDelete={handleDelete}
             payerBalances={payerBalances}
           />
@@ -260,6 +265,7 @@ export default function ExpensesPage() {
             description: editingExpense.description,
             amount: Number(editingExpense.amount),
             rating: editingExpense.rating ?? 0,
+            expenseType: editingExpense.expense_type ?? undefined,
             payers: (editingExpense.payers ?? []).map(p => ({ memberId: p.member_id, amount: Number(p.amount) })),
             splits: editingExpense.splits.map(s => ({ memberId: s.member_id, amount: Number(s.amount) })),
           } : undefined}

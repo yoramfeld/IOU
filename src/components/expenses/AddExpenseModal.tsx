@@ -3,10 +3,20 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Member } from '@/types'
 
+const DEFAULT_TYPES = ['Lunch', 'Dinner', 'Coffee', 'Breakfast', 'Taxi/Uber']
+
+function loadCustomTypes(): string[] {
+  try { return JSON.parse(localStorage.getItem('iou_expense_types') || '[]') } catch { return [] }
+}
+function saveCustomTypes(types: string[]) {
+  try { localStorage.setItem('iou_expense_types', JSON.stringify(types)) } catch {}
+}
+
 interface EditExpenseData {
   description: string
   amount: number
   rating?: number
+  expenseType?: string
   payers: { memberId: string; amount: number }[]
   splits: { memberId: string; amount: number }[]
 }
@@ -28,6 +38,9 @@ interface Props {
     payers: { memberId: string; amount: number }[]
     receiptUrl?: string
     rating?: number
+    expenseType?: string
+    lat?: number
+    lng?: number
   }) => Promise<void>
   onClose: () => void
 }
@@ -47,6 +60,11 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
 
   const [description, setDescription] = useState(editExpense?.description ?? '')
   const [rating, setRating] = useState<number>(editExpense?.rating ?? 0)
+  const [expenseType, setExpenseType] = useState<string>(editExpense?.expenseType ?? '')
+  const [customTypes, setCustomTypes] = useState<string[]>(loadCustomTypes)
+  const [addingType, setAddingType] = useState(false)
+  const [newTypeInput, setNewTypeInput] = useState('')
+  const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null)
   const [amount, setAmount] = useState(editExpense ? String(editExpense.amount) : '')
   const [tipPct, setTipPct] = useState(editExpense ? 0 : readSavedTip)
   const [roundUp, setRoundUp] = useState(editExpense ? false : true)
@@ -87,6 +105,14 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (editExpense) return  // don't capture geo on edit
+    navigator.geolocation?.getCurrentPosition(
+      pos => setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {}  // silently ignore denial
+    )
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   function showError(msg: string) {
     setError(msg)
@@ -278,6 +304,9 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         payers,
         receiptUrl,
         rating: rating > 0 ? rating : undefined,
+        expenseType: expenseType || undefined,
+        lat: geo?.lat,
+        lng: geo?.lng,
       })
       onClose()
     } catch {
@@ -307,6 +336,60 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
             onFocus={selectAll}
             autoFocus
           />
+        </div>
+
+        {/* Expense type chips */}
+        <div>
+          <div className="flex flex-wrap gap-1.5">
+            {[...DEFAULT_TYPES, ...customTypes].map(t => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setExpenseType(expenseType === t ? '' : t)}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  expenseType === t
+                    ? 'bg-accent text-white border-accent'
+                    : 'border-border text-ink-soft hover:border-accent'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+            {addingType ? (
+              <div className="flex items-center gap-1">
+                <input
+                  autoFocus
+                  className="text-xs border border-border rounded-full px-2.5 py-1 w-24 outline-none focus:border-accent"
+                  placeholder="Type name…"
+                  value={newTypeInput}
+                  onChange={e => setNewTypeInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newTypeInput.trim()) {
+                      const t = newTypeInput.trim()
+                      const updated = [...customTypes, t]
+                      setCustomTypes(updated)
+                      saveCustomTypes(updated)
+                      setExpenseType(t)
+                      setNewTypeInput('')
+                      setAddingType(false)
+                    } else if (e.key === 'Escape') {
+                      setAddingType(false)
+                      setNewTypeInput('')
+                    }
+                  }}
+                  onBlur={() => { setAddingType(false); setNewTypeInput('') }}
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAddingType(true)}
+                className="text-xs px-2.5 py-1 rounded-full border border-dashed border-border text-ink-muted hover:border-accent"
+              >
+                + Add
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Star rating */}

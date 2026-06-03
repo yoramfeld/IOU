@@ -26,6 +26,9 @@ export interface Expense {
   entered_by: string
   receipt_url?: string | null
   rating?: number | null
+  expense_type?: string | null
+  lat?: number | null
+  lng?: number | null
   created_at: string
   payers?: ExpensePayer[]
 }
