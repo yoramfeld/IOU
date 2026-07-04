@@ -15,6 +15,16 @@ export interface ExtractedReceipt {
   raw: unknown
 }
 
+// Distinct from other OCR failures so the API route can show a clear, actionable message
+// instead of a raw HTTP status — Gemini's free tier is quota-limited per day, not just
+// per minute, so "try again in a few seconds" would be misleading advice for this one.
+export class OcrRateLimitError extends Error {
+  constructor() {
+    super('Gemini free-tier daily quota exceeded')
+    this.name = 'OcrRateLimitError'
+  }
+}
+
 // Only the vertical position is used (checkbox alignment) — horizontal bounding-box
 // accuracy isn't needed, so we accept Gemini's native box_2d grounding format but only
 // ever read ymin/ymax out of it.
@@ -90,6 +100,9 @@ export async function extractReceiptRows(imageUrl: string): Promise<ExtractedRec
     },
   )
 
+  if (response.status === 429) {
+    throw new OcrRateLimitError()
+  }
   if (!response.ok) {
     throw new Error(`Gemini OCR request failed: ${response.status}`)
   }

@@ -146,8 +146,12 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
         body: JSON.stringify({ groupId, memberId: currentMemberId, imageUrl: uploaded.secure_url }),
       })
       if (!ocrRes.ok) {
+        // The OCR route already returns a complete, user-facing sentence — show it as-is
+        // rather than wrapping it in the generic "Failed at <stage>" debug format below.
         const errData = await ocrRes.json().catch(() => ({}))
-        throw new Error(errData.debug || errData.error || `ocr ${ocrRes.status}`)
+        setReceiptStatus('error')
+        showError(errData.error || 'Could not scan receipt — try again, or add items manually.', 8000)
+        return
       }
       const ocrData: { items: { description: string; amount: number; yCenterPct: number | null }[]; total: number | null; direction: 'ltr' | 'rtl'; raw: unknown } = await ocrRes.json()
 
@@ -158,7 +162,7 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
       setReceiptStatus('idle')
     } catch (err) {
       setReceiptStatus('error')
-      showError(`Failed at ${stage}: ${err instanceof Error ? err.message : String(err)}`, 15000)
+      showError(`Failed at ${stage}: ${err instanceof Error ? err.message : String(err)}`, 8000)
     }
   }
 

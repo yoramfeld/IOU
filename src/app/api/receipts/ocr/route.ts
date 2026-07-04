@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { extractReceiptRows } from '@/lib/ocr'
+import { extractReceiptRows, OcrRateLimitError } from '@/lib/ocr'
 
 export const dynamic = 'force-dynamic'
 // Gemini's vision+thinking response can take several seconds on a real (larger, more
@@ -25,7 +25,13 @@ export async function POST(request: Request) {
     const items = rows.map((row, i) => ({ description: `Row ${i + 1}`, amount: row.amount, yCenterPct: row.yCenterPct }))
     return NextResponse.json({ items, total, direction, raw })
   } catch (err) {
-    console.error('OCR failed for', imageUrl, err)
-    return NextResponse.json({ error: 'OCR failed', debug: String(err), imageUrl }, { status: 502 })
+    if (err instanceof OcrRateLimitError) {
+      return NextResponse.json(
+        { error: "Receipt scanning hit today's free-tier limit — try again tomorrow, or add items manually." },
+        { status: 429 },
+      )
+    }
+    console.error('OCR failed:', err)
+    return NextResponse.json({ error: 'Could not scan receipt — try again, or add items manually.' }, { status: 502 })
   }
 }
