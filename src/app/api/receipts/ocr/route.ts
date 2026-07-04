@@ -20,7 +20,8 @@ export async function POST(request: Request) {
     const { rows, total, direction, raw } = await extractReceiptRows(imageUrl)
     const items = rows.map((row, i) => ({ description: `Row ${i + 1}`, amount: row.amount, yCenterPct: row.yCenterPct }))
     return NextResponse.json({ items, total, direction, raw })
-  } catch {
-    return NextResponse.json({ error: 'OCR failed' }, { status: 502 })
+  } catch (err) {
+    console.error('OCR failed for', imageUrl, err)
+    return NextResponse.json({ error: 'OCR failed', debug: String(err), imageUrl }, { status: 502 })
   }
 }
