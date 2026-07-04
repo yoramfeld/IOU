@@ -35,12 +35,14 @@ export interface ReceiptItem {
   amount: number
   memberCount: number
   included: boolean
+  yCenterPct: number | null
 }
 
 export interface ReceiptDetail {
   id: string
   imageUrl: string
   parsedTotal: number | null
+  direction: 'ltr' | 'rtl'
   items: ReceiptItem[]
 }
 

@@ -3,29 +3,59 @@
 
 const GEMINI_MODEL = 'gemini-2.5-flash'
 
+export interface ExtractedRow {
+  amount: number
+  yCenterPct: number | null // 0-100, vertical center of this row on the receipt image; null if ungrounded
+}
+
 export interface ExtractedReceipt {
-  rows: number[]
+  rows: ExtractedRow[]
   total: number | null
+  direction: 'ltr' | 'rtl'
   raw: unknown
 }
 
+// Only the vertical position is used (checkbox alignment) — horizontal bounding-box
+// accuracy isn't needed, so we accept Gemini's native box_2d grounding format but only
+// ever read ymin/ymax out of it.
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
+    direction: {
+      type: 'STRING',
+      enum: ['ltr', 'rtl'],
+      description: 'Primary reading direction of the receipt text — "rtl" for Hebrew, Arabic, etc.',
+    },
     rows: {
       type: 'ARRAY',
-      items: { type: 'NUMBER' },
-      description: 'Pre-tax line-item totals from the receipt, in the order they are printed.',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          amount: { type: 'NUMBER', description: 'Pre-tax cost of this line item.' },
+          box_2d: {
+            type: 'ARRAY',
+            items: { type: 'INTEGER' },
+            description: 'Bounding box around this line, as [ymin, xmin, ymax, xmax] normalized 0-1000.',
+          },
+        },
+        required: ['amount', 'box_2d'],
+      },
+      description: 'Line items in the order they are printed, top to bottom.',
     },
     total: {
       type: 'NUMBER',
       description: 'The printed grand total (or subtotal if no grand total is visible).',
     },
   },
-  required: ['rows', 'total'],
+  required: ['rows', 'total', 'direction'],
 }
 
-const PROMPT = `Analyze this receipt image. Extract the pre-tax cost of each line item into the "rows" array, in the order they're printed. Do not include tax, tip, service charge, or the total line itself in "rows". Also read the printed grand total (or subtotal if no total is visible) into "total". If the receipt is in Hebrew or another right-to-left language, note that amounts are typically printed in the left column rather than the right — identify each amount by its numeric/currency formatting, not by assuming it's on a particular side. Respond with JSON only.`
+const PROMPT = `Analyze this receipt image.
+1. Determine the primary reading direction ("ltr" or "rtl" — Hebrew/Arabic receipts are "rtl").
+2. For each pre-tax line item (in printed order, top to bottom), extract its cost into "amount" and a bounding box into "box_2d" as [ymin, xmin, ymax, xmax] normalized 0-1000. The box must tightly bound ONLY the visible text glyphs of that specific line (top of its tallest character to the bottom/baseline of its lowest character) — do not include surrounding whitespace, line spacing, or any part of adjacent lines. Line items are typically only 15-25 units tall in this normalized scale; be precise about the exact vertical extent of the glyphs themselves. Do not include tax, tip, service charge, or the total line as a row.
+3. Read the printed grand total (or subtotal if no total is visible) into "total".
+On a right-to-left receipt, amounts are typically printed in the left column rather than the right — identify amounts by numeric/currency formatting, not by assuming a side.
+Respond with JSON only.`
 
 export async function extractReceiptRows(imageUrl: string): Promise<ExtractedReceipt> {
   const apiKey = process.env.GEMINI_API_KEY!
@@ -70,9 +100,27 @@ export async function extractReceiptRows(imageUrl: string): Promise<ExtractedRec
     throw new Error('Gemini OCR returned no content')
   }
 
-  const parsed = JSON.parse(rawText) as { rows?: unknown; total?: unknown }
-  const rows = Array.isArray(parsed.rows) ? parsed.rows.filter((r): r is number => typeof r === 'number' && r >= 0) : []
-  const total = typeof parsed.total === 'number' ? parsed.total : null
+  const parsed = JSON.parse(rawText) as {
+    rows?: unknown
+    total?: unknown
+    direction?: unknown
+  }
 
-  return { rows, total, raw: result }
+  const rawRows = Array.isArray(parsed.rows) ? parsed.rows : []
+  const rows: ExtractedRow[] = rawRows
+    .filter((r): r is { amount: unknown; box_2d: unknown } => typeof r === 'object' && r !== null)
+    .map(r => {
+      const amount = typeof r.amount === 'number' && r.amount >= 0 ? r.amount : null
+      const box = Array.isArray(r.box_2d) && r.box_2d.length === 4 && r.box_2d.every(n => typeof n === 'number')
+        ? (r.box_2d as number[])
+        : null
+      const yCenterPct = box ? ((box[0] + box[2]) / 2 / 1000) * 100 : null
+      return amount !== null ? { amount, yCenterPct } : null
+    })
+    .filter((r): r is ExtractedRow => r !== null)
+
+  const total = typeof parsed.total === 'number' ? parsed.total : null
+  const direction: 'ltr' | 'rtl' = parsed.direction === 'rtl' ? 'rtl' : 'ltr'
+
+  return { rows, total, direction, raw: result }
 }

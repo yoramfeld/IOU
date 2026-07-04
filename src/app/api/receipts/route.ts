@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   }
 
   const receiptRows = await sql`
-    SELECT r.id, r.image_url, r.parsed_total, e.group_id
+    SELECT r.id, r.image_url, r.parsed_total, r.direction, e.group_id
     FROM receipts r
     JOIN expenses e ON e.id = r.expense_id
     WHERE r.id = ${receiptId}
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 
   const items = await sql`
     SELECT
-      ri.id, ri.description, ri.amount, ri.sort_order,
+      ri.id, ri.description, ri.amount, ri.sort_order, ri.y_center_pct,
       (SELECT count(*) FROM receipt_item_members rim WHERE rim.item_id = ri.id) AS member_count,
       EXISTS(SELECT 1 FROM receipt_item_members rim WHERE rim.item_id = ri.id AND rim.member_id = ${memberId}) AS included
     FROM receipt_items ri
@@ -43,12 +43,14 @@ export async function GET(request: Request) {
     id: receipt.id,
     imageUrl: receipt.image_url,
     parsedTotal: receipt.parsed_total,
+    direction: receipt.direction === 'rtl' ? 'rtl' : 'ltr',
     items: items.map(it => ({
       id: it.id,
       description: it.description,
       amount: Number(it.amount),
       memberCount: Number(it.member_count),
       included: it.included,
+      yCenterPct: it.y_center_pct !== null ? Number(it.y_center_pct) : null,
     })),
   })
 }

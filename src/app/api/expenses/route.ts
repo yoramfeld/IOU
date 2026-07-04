@@ -38,7 +38,8 @@ interface ReceiptInput {
   cloudinaryPublicId: string
   rawOcrJson?: unknown
   total?: number | null
-  items: { description: string; amount: number }[]
+  direction?: 'ltr' | 'rtl'
+  items: { description: string; amount: number; yCenterPct: number | null }[]
 }
 
 export async function POST(request: Request) {
@@ -145,8 +146,8 @@ export async function POST(request: Request) {
   if (receipt) {
     const hasItems = Array.isArray(receipt.items) && receipt.items.length > 0
     const receiptRows = await sql`
-      INSERT INTO receipts (expense_id, image_url, cloudinary_public_id, raw_ocr_json, parsed_total, ocr_status)
-      VALUES (${expense.id}, ${receipt.imageUrl}, ${receipt.cloudinaryPublicId}, ${JSON.stringify(receipt.rawOcrJson ?? null)}, ${receipt.total ?? null}, ${hasItems ? 'ok' : 'no_items'})
+      INSERT INTO receipts (expense_id, image_url, cloudinary_public_id, raw_ocr_json, parsed_total, direction, ocr_status)
+      VALUES (${expense.id}, ${receipt.imageUrl}, ${receipt.cloudinaryPublicId}, ${JSON.stringify(receipt.rawOcrJson ?? null)}, ${receipt.total ?? null}, ${receipt.direction ?? 'ltr'}, ${hasItems ? 'ok' : 'no_items'})
       RETURNING id
     `
     const receiptId = receiptRows[0]?.id
@@ -155,8 +156,8 @@ export async function POST(request: Request) {
       for (let i = 0; i < receipt.items.length; i++) {
         const item = receipt.items[i]
         const itemRows = await sql`
-          INSERT INTO receipt_items (receipt_id, description, amount, sort_order)
-          VALUES (${receiptId}, ${item.description}, ${Math.round(item.amount * 100) / 100}, ${i})
+          INSERT INTO receipt_items (receipt_id, description, amount, sort_order, y_center_pct)
+          VALUES (${receiptId}, ${item.description}, ${Math.round(item.amount * 100) / 100}, ${i}, ${item.yCenterPct ?? null})
           RETURNING id
         `
         const itemId = itemRows[0]?.id

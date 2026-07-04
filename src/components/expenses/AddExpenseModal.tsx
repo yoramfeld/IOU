@@ -8,7 +8,8 @@ interface ReceiptPayload {
   cloudinaryPublicId: string
   rawOcrJson?: unknown
   total: number | null
-  items: { description: string; amount: number }[]
+  direction: 'ltr' | 'rtl'
+  items: { description: string; amount: number; yCenterPct: number | null }[]
 }
 
 interface Props {
@@ -63,7 +64,8 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
   // Receipt upload / OCR — all optional, additive to the flow above.
   const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null)
   const [cloudinaryPublicId, setCloudinaryPublicId] = useState<string | null>(null)
-  const [receiptItems, setReceiptItems] = useState<{ description: string; amount: string }[]>([])
+  const [receiptItems, setReceiptItems] = useState<{ description: string; amount: string; yCenterPct: number | null }[]>([])
+  const [receiptDirection, setReceiptDirection] = useState<'ltr' | 'rtl'>('ltr')
   const [ocrRaw, setOcrRaw] = useState<unknown>(null)
   const [receiptStatus, setReceiptStatus] = useState<'idle' | 'uploading' | 'scanning' | 'error'>('idle')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -138,9 +140,10 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
         body: JSON.stringify({ groupId, memberId: currentMemberId, imageUrl: uploaded.secure_url }),
       })
       if (!ocrRes.ok) throw new Error('ocr failed')
-      const ocrData: { items: { description: string; amount: number }[]; total: number | null; raw: unknown } = await ocrRes.json()
+      const ocrData: { items: { description: string; amount: number; yCenterPct: number | null }[]; total: number | null; direction: 'ltr' | 'rtl'; raw: unknown } = await ocrRes.json()
 
-      setReceiptItems(ocrData.items.map(it => ({ description: it.description, amount: String(it.amount) })))
+      setReceiptItems(ocrData.items.map(it => ({ description: it.description, amount: String(it.amount), yCenterPct: it.yCenterPct })))
+      setReceiptDirection(ocrData.direction)
       setOcrRaw(ocrData.raw)
       if (ocrData.total && !amount) handleBillChange(String(ocrData.total))
       setReceiptStatus('idle')
@@ -159,7 +162,9 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
   }
 
   function addReceiptItem() {
-    setReceiptItems(prev => [...prev, { description: `Row ${prev.length + 1}`, amount: '' }])
+    // yCenterPct is null (unknown position) for manually-added rows — ReviewReceiptModal
+    // falls back to the plain full-image layout whenever any item lacks a position.
+    setReceiptItems(prev => [...prev, { description: `Row ${prev.length + 1}`, amount: '', yCenterPct: null }])
   }
 
   function toggleExclude(memberId: string) {
@@ -341,8 +346,9 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
             cloudinaryPublicId,
             rawOcrJson: ocrRaw,
             total: billVal > 0 ? billVal : null,
+            direction: receiptDirection,
             // Manual split overrides and itemized-consumption review are mutually exclusive
-            items: isManualSplit ? [] : validReceiptItems.map(it => ({ description: it.description, amount: parseFloat(it.amount) })),
+            items: isManualSplit ? [] : validReceiptItems.map(it => ({ description: it.description, amount: parseFloat(it.amount), yCenterPct: it.yCenterPct })),
           }
         : undefined
       await onSubmit({

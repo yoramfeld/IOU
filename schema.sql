@@ -108,17 +108,22 @@ create table receipts (
   cloudinary_public_id  text not null,
   raw_ocr_json          jsonb,
   parsed_total          numeric(10,2),
+  direction             text not null default 'ltr',
   ocr_status            text not null default 'ok',
   created_at            timestamptz not null default now()
 );
 
--- Parsed line items (as edited/confirmed by the entering member before submit)
+-- Parsed line items (as edited/confirmed by the entering member before submit).
+-- y_center_pct (0-100) is the item's vertical position on the receipt image, used to
+-- align each member's review checkbox next to the actual line in ReviewReceiptModal.
+-- Null when the position is unknown (e.g. a row added manually, not from OCR).
 create table receipt_items (
-  id           uuid primary key default uuid_generate_v4(),
-  receipt_id   uuid not null references receipts(id) on delete cascade,
-  description  text not null,
-  amount       numeric(10,2) not null check (amount >= 0),
-  sort_order   integer not null default 0
+  id            uuid primary key default uuid_generate_v4(),
+  receipt_id    uuid not null references receipts(id) on delete cascade,
+  description   text not null,
+  amount        numeric(10,2) not null check (amount >= 0),
+  sort_order    integer not null default 0,
+  y_center_pct  numeric(5,2)
 );
 
 -- Opt-out membership: a row means "this member currently consumes this item".

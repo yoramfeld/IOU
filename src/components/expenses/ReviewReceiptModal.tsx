@@ -50,6 +50,11 @@ export default function ReviewReceiptModal({ receiptId, memberId, currency, onCl
       }, 0)
     : 0
 
+  // Aligned checkbox rail next to the receipt photo needs every item's vertical position —
+  // falls back to the plain full-image-then-list layout if OCR didn't ground every row
+  // (e.g. a row the entering member added by hand has no known position on the image).
+  const allPositioned = !!receipt && receipt.items.length > 0 && receipt.items.every(it => it.yCenterPct !== null)
+
   async function handleSubmit() {
     if (!receipt) return
     setSubmitting(true)
@@ -84,29 +89,59 @@ export default function ReviewReceiptModal({ receiptId, memberId, currency, onCl
           <p className="text-center text-ink-muted py-8">Loading...</p>
         ) : (
           <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={receipt.imageUrl} alt="Receipt" className="w-full rounded-lg border border-border" />
-
             <p className="text-xs text-ink-soft">Uncheck anything you didn&apos;t have. Tax/tip are split proportionally among what you keep.</p>
 
-            <div className="space-y-2">
-              {receipt.items.map(item => {
-                const disabled = isLastMember(item)
-                return (
-                  <label key={item.id} className={`flex items-center gap-2.5 py-1 ${disabled ? 'opacity-60' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={!!included[item.id]}
-                      disabled={disabled}
-                      onChange={() => toggle(item.id)}
-                      className="w-4 h-4"
-                    />
-                    <span className="flex-1 text-sm truncate">{item.description}</span>
-                    <span className="text-sm text-ink-muted">{currency}{item.amount}</span>
-                  </label>
-                )
-              })}
-            </div>
+            {allPositioned ? (
+              <div className={`flex gap-2 items-stretch ${receipt.direction === 'rtl' ? 'flex-row-reverse' : ''}`}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={receipt.imageUrl} alt="Receipt" className="flex-1 min-w-0 rounded-lg border border-border block" />
+                <div className="relative w-16 shrink-0">
+                  {receipt.items.map(item => {
+                    const disabled = isLastMember(item)
+                    return (
+                      <label
+                        key={item.id}
+                        dir={receipt.direction}
+                        className={`absolute left-0 right-0 flex items-center gap-1 ${disabled ? 'opacity-60' : ''}`}
+                        style={{ top: `${item.yCenterPct}%`, transform: 'translateY(-50%)' }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!included[item.id]}
+                          disabled={disabled}
+                          onChange={() => toggle(item.id)}
+                          className="w-4 h-4 shrink-0"
+                        />
+                        <span className="text-[10px] text-ink-muted truncate">{currency}{item.amount}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={receipt.imageUrl} alt="Receipt" className="w-full rounded-lg border border-border" />
+                <div className="space-y-2">
+                  {receipt.items.map(item => {
+                    const disabled = isLastMember(item)
+                    return (
+                      <label key={item.id} className={`flex items-center gap-2.5 py-1 ${disabled ? 'opacity-60' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={!!included[item.id]}
+                          disabled={disabled}
+                          onChange={() => toggle(item.id)}
+                          className="w-4 h-4"
+                        />
+                        <span className="flex-1 text-sm truncate">{item.description}</span>
+                        <span className="text-sm text-ink-muted">{currency}{item.amount}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </>
+            )}
 
             <div className="flex items-center justify-between pt-2 border-t border-border">
               <span className="text-sm font-medium">Your total</span>

@@ -54,7 +54,7 @@ export default function ExpensesPage() {
     splitAmong: string[]
     customSplits?: { memberId: string; amount: number }[]
     payers: { memberId: string; amount: number }[]
-    receipt?: { imageUrl: string; cloudinaryPublicId: string; rawOcrJson?: unknown; total: number | null; items: { description: string; amount: number }[] }
+    receipt?: { imageUrl: string; cloudinaryPublicId: string; rawOcrJson?: unknown; total: number | null; direction: 'ltr' | 'rtl'; items: { description: string; amount: number; yCenterPct: number | null }[] }
   }) {
     if (!session) return
     const res = await fetch('/api/expenses', {
