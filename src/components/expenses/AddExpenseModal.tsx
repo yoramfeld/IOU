@@ -407,6 +407,9 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
 
         {receiptImageUrl && (
           <div className="space-y-2">
+            <p className="text-xs text-ink-muted">
+              Editing rows here changes the receipt for everyone. Each person opts out of items they didn&apos;t have after you submit.
+            </p>
             <div className="flex gap-3 items-start">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={receiptImageUrl} alt="Receipt" className="w-16 h-16 object-cover rounded-lg border border-border shrink-0" />
