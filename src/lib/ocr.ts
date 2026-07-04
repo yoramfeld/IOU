@@ -25,7 +25,7 @@ const RESPONSE_SCHEMA = {
   required: ['rows', 'total'],
 }
 
-const PROMPT = `Analyze this receipt image. Extract the pre-tax cost of each line item into the "rows" array, in the order they're printed. Do not include tax, tip, service charge, or the total line itself in "rows". Also read the printed grand total (or subtotal if no total is visible) into "total". Respond with JSON only.`
+const PROMPT = `Analyze this receipt image. Extract the pre-tax cost of each line item into the "rows" array, in the order they're printed. Do not include tax, tip, service charge, or the total line itself in "rows". Also read the printed grand total (or subtotal if no total is visible) into "total". If the receipt is in Hebrew or another right-to-left language, note that amounts are typically printed in the left column rather than the right — identify each amount by its numeric/currency formatting, not by assuming it's on a particular side. Respond with JSON only.`
 
 export async function extractReceiptRows(imageUrl: string): Promise<ExtractedReceipt> {
   const apiKey = process.env.GEMINI_API_KEY!
