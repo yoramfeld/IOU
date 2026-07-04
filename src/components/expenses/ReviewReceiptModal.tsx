@@ -50,10 +50,21 @@ export default function ReviewReceiptModal({ receiptId, memberId, currency, onCl
       }, 0)
     : 0
 
-  // Aligned checkbox rail next to the receipt photo needs every item's vertical position —
+  // Tap-to-strike directly on the receipt photo needs every item's vertical position —
   // falls back to the plain full-image-then-list layout if OCR didn't ground every row
   // (e.g. a row the entering member added by hand has no known position on the image).
   const allPositioned = !!receipt && receipt.items.length > 0 && receipt.items.every(it => it.yCenterPct !== null)
+
+  // Each item's tap target/strike-line spans half the average gap to its neighbors above
+  // and below — we only know each item's vertical *center*, not its real height, so this
+  // approximates a sensible row height from the receipt's own line spacing.
+  const bandHalfPct = (() => {
+    if (!allPositioned || !receipt || receipt.items.length < 2) return 3
+    const centers = receipt.items.map(it => it.yCenterPct!).sort((a, b) => a - b)
+    const gaps = centers.slice(1).map((c, i) => c - centers[i])
+    const avgGap = gaps.reduce((s, g) => s + g, 0) / gaps.length
+    return avgGap / 2
+  })()
 
   async function handleSubmit() {
     if (!receipt) return
@@ -89,34 +100,41 @@ export default function ReviewReceiptModal({ receiptId, memberId, currency, onCl
           <p className="text-center text-ink-muted py-8">Loading...</p>
         ) : (
           <>
-            <p className="text-xs text-ink-soft">Uncheck anything you didn&apos;t have. Tax/tip are split proportionally among what you keep.</p>
+            <p className="text-xs text-ink-soft">
+              {allPositioned
+                ? "Tap anything you didn't have to cross it out. Tax/tip are split proportionally among what you keep."
+                : "Uncheck anything you didn't have. Tax/tip are split proportionally among what you keep."}
+            </p>
 
             {allPositioned ? (
-              <div className={`flex gap-2 items-stretch ${receipt.direction === 'rtl' ? 'flex-row-reverse' : ''}`}>
+              <div className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={receipt.imageUrl} alt="Receipt" className="flex-1 min-w-0 rounded-lg border border-border block" />
-                <div className="relative w-16 shrink-0">
-                  {receipt.items.map(item => {
-                    const disabled = isLastMember(item)
-                    return (
-                      <label
-                        key={item.id}
-                        dir={receipt.direction}
-                        className={`absolute left-0 right-0 flex items-center gap-1 ${disabled ? 'opacity-60' : ''}`}
-                        style={{ top: `${item.yCenterPct}%`, transform: 'translateY(-50%)' }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!!included[item.id]}
-                          disabled={disabled}
-                          onChange={() => toggle(item.id)}
-                          className="w-4 h-4 shrink-0"
-                        />
-                        <span className="text-[10px] text-ink-muted truncate">{currency}{item.amount}</span>
-                      </label>
-                    )
-                  })}
-                </div>
+                <img src={receipt.imageUrl} alt="Receipt" className="w-full rounded-lg border border-border block" />
+                {receipt.items.map(item => {
+                  const disabled = isLastMember(item)
+                  const excluded = !included[item.id]
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => toggle(item.id)}
+                      aria-label={`${item.description}, ${currency}${item.amount}${excluded ? ' — excluded' : ''}`}
+                      className="absolute left-0 right-0 flex items-center"
+                      style={{
+                        top: `${item.yCenterPct! - bandHalfPct}%`,
+                        height: `${bandHalfPct * 2}%`,
+                      }}
+                    >
+                      {excluded && (
+                        <span className="block w-full h-0.5 bg-red pointer-events-none" />
+                      )}
+                      {excluded && (
+                        <span className="absolute inset-0 bg-white/40 pointer-events-none" />
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             ) : (
               <>
