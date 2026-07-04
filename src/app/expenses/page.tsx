@@ -9,6 +9,7 @@ import BottomNav from '@/components/ui/BottomNav'
 import AdminModeToggle from '@/components/ui/AdminModeToggle'
 import ExpenseList from '@/components/expenses/ExpenseList'
 import AddExpenseModal from '@/components/expenses/AddExpenseModal'
+import ReviewReceiptModal from '@/components/expenses/ReviewReceiptModal'
 import QRModal from '@/components/ui/QRModal'
 import type { Expense, ExpensePayer, ExpenseSplit, Member } from '@/types'
 
@@ -21,13 +22,14 @@ export default function ExpensesPage() {
   const [showModal, setShowModal] = useState(false)
   const [showQRModal, setShowQRModal] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
+  const [reviewingExpenseId, setReviewingExpenseId] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     if (!session) return
     try {
       const t = Date.now()
       const [expRes, memRes] = await Promise.all([
-        fetch(`/api/expenses?groupId=${session.groupId}&_t=${t}`),
+        fetch(`/api/expenses?groupId=${session.groupId}&memberId=${session.memberId}&_t=${t}`),
         fetch(`/api/members?groupId=${session.groupId}&_t=${t}`),
       ])
       if (expRes.ok) setExpenses(await expRes.json())
@@ -45,7 +47,15 @@ export default function ExpensesPage() {
     if (session) fetchData()
   }, [session, loading, router, fetchData])
 
-  async function handleAddExpense(data: { paidBy: string; amount: number; description: string; splitAmong: string[]; customSplits?: { memberId: string; amount: number }[]; payers: { memberId: string; amount: number }[] }) {
+  async function handleAddExpense(data: {
+    paidBy: string
+    amount: number
+    description: string
+    splitAmong: string[]
+    customSplits?: { memberId: string; amount: number }[]
+    payers: { memberId: string; amount: number }[]
+    receipt?: { imageUrl: string; cloudinaryPublicId: string; rawOcrJson?: unknown; total: number | null; items: { description: string; amount: number }[] }
+  }) {
     if (!session) return
     const res = await fetch('/api/expenses', {
       method: 'POST',
@@ -59,6 +69,7 @@ export default function ExpensesPage() {
         customSplits: data.customSplits,
         payers: data.payers,
         enteredBy: session.memberId,
+        receipt: data.receipt,
       }),
     })
     if (!res.ok) throw new Error('Failed')
@@ -161,6 +172,7 @@ export default function ExpensesPage() {
             isAdmin={session.isAdmin && adminMode}
             onDelete={handleDelete}
             payerBalances={payerBalances}
+            onReview={id => setReviewingExpenseId(id)}
           />
         )}
       </main>
@@ -175,6 +187,7 @@ export default function ExpensesPage() {
 
       {showModal && (
         <AddExpenseModal
+          groupId={session.groupId}
           members={members}
           currentMemberId={session.memberId}
           isAdmin={session.isAdmin && adminMode}
@@ -182,6 +195,16 @@ export default function ExpensesPage() {
           memberBalances={memberBalances}
           onSubmit={handleAddExpense}
           onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {reviewingExpenseId && expenses.find(e => e.id === reviewingExpenseId)?.receipt_id && (
+        <ReviewReceiptModal
+          receiptId={expenses.find(e => e.id === reviewingExpenseId)!.receipt_id!}
+          memberId={session.memberId}
+          currency={session.currency}
+          onClose={() => setReviewingExpenseId(null)}
+          onSubmitted={() => { setReviewingExpenseId(null); fetchData() }}
         />
       )}
 

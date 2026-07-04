@@ -99,3 +99,56 @@ create policy "public read" on pending_verifications for select using (true);
 create policy "service write" on pending_verifications for all using (true) with check (true);
 alter table qr_tokens enable row level security;
 create policy "service write" on qr_tokens for all using (true) with check (true);
+
+-- Receipt attached to an expense (optional, 1:1)
+create table receipts (
+  id                    uuid primary key default uuid_generate_v4(),
+  expense_id            uuid not null references expenses(id) on delete cascade unique,
+  image_url             text not null,
+  cloudinary_public_id  text not null,
+  raw_ocr_json          jsonb,
+  parsed_total          numeric(10,2),
+  ocr_status            text not null default 'ok',
+  created_at            timestamptz not null default now()
+);
+
+-- Parsed line items (as edited/confirmed by the entering member before submit)
+create table receipt_items (
+  id           uuid primary key default uuid_generate_v4(),
+  receipt_id   uuid not null references receipts(id) on delete cascade,
+  description  text not null,
+  amount       numeric(10,2) not null check (amount >= 0),
+  sort_order   integer not null default 0
+);
+
+-- Opt-out membership: a row means "this member currently consumes this item".
+-- Seeded for every (item, splitAmong-member) pair at creation = everyone-in-every-item default.
+-- Reviewing = deleting your own row for items you didn't have.
+create table receipt_item_members (
+  id         uuid primary key default uuid_generate_v4(),
+  item_id    uuid not null references receipt_items(id) on delete cascade,
+  member_id  uuid not null references members(id) on delete cascade,
+  unique (item_id, member_id)
+);
+
+-- Per-member "have they opened the review flow yet" marker, independent of whether they changed anything.
+create table receipt_reviews (
+  id           uuid primary key default uuid_generate_v4(),
+  receipt_id   uuid not null references receipts(id) on delete cascade,
+  member_id    uuid not null references members(id) on delete cascade,
+  reviewed_at  timestamptz,
+  unique (receipt_id, member_id)
+);
+
+alter table receipts enable row level security;
+create policy "public read" on receipts for select using (true);
+create policy "service write" on receipts for all using (true) with check (true);
+alter table receipt_items enable row level security;
+create policy "public read" on receipt_items for select using (true);
+create policy "service write" on receipt_items for all using (true) with check (true);
+alter table receipt_item_members enable row level security;
+create policy "public read" on receipt_item_members for select using (true);
+create policy "service write" on receipt_item_members for all using (true) with check (true);
+alter table receipt_reviews enable row level security;
+create policy "public read" on receipt_reviews for select using (true);
+create policy "service write" on receipt_reviews for all using (true) with check (true);

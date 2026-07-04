@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
+import { fetchGroupBalances, sortByDebtPriority, computeEqualSplitCents } from '@/lib/splitAlgorithm'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const groupId = searchParams.get('groupId')
+  const memberId = searchParams.get('memberId')
 
   if (!groupId) {
     return NextResponse.json({ error: 'Missing groupId' }, { status: 400 })
@@ -15,8 +17,15 @@ export async function GET(request: Request) {
     SELECT
       e.*,
       COALESCE((SELECT json_agg(ep.*) FROM expense_payers ep WHERE ep.expense_id = e.id), '[]'::json) AS payers,
-      COALESCE((SELECT json_agg(es.*) FROM expense_splits es WHERE es.expense_id = e.id), '[]'::json) AS splits
+      COALESCE((SELECT json_agg(es.*) FROM expense_splits es WHERE es.expense_id = e.id), '[]'::json) AS splits,
+      r.id AS receipt_id,
+      (r.id IS NOT NULL) AS has_receipt,
+      CASE WHEN ${memberId}::uuid IS NULL THEN false ELSE EXISTS (
+        SELECT 1 FROM receipt_reviews rr
+        WHERE rr.receipt_id = r.id AND rr.member_id = ${memberId} AND rr.reviewed_at IS NULL
+      ) END AS review_pending
     FROM expenses e
+    LEFT JOIN receipts r ON r.expense_id = e.id
     WHERE e.group_id = ${groupId}
     ORDER BY e.created_at DESC
   `
@@ -24,8 +33,26 @@ export async function GET(request: Request) {
   return NextResponse.json(data)
 }
 
+interface ReceiptInput {
+  imageUrl: string
+  cloudinaryPublicId: string
+  rawOcrJson?: unknown
+  total?: number | null
+  items: { description: string; amount: number }[]
+}
+
 export async function POST(request: Request) {
-  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy, payers } = await request.json()
+  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy, payers, receipt } = await request.json() as {
+    groupId: string
+    paidBy: string
+    amount: number
+    description: string
+    splitAmong?: string[]
+    customSplits?: { memberId: string; amount: number }[]
+    enteredBy: string
+    payers?: { memberId: string; amount: number }[]
+    receipt?: ReceiptInput
+  }
 
   const hasCustom = Array.isArray(customSplits) && customSplits.length > 0
   if (!groupId || !paidBy || !amount || !description?.trim() || !enteredBy) {
@@ -84,63 +111,21 @@ export async function POST(request: Request) {
 
   // Create splits
   let splits: { memberId: string; amount: number }[]
+  const memberIds: string[] = hasCustom
+    ? customSplits!.map(s => s.memberId)
+    : splitAmong!
 
   if (hasCustom) {
-    splits = customSplits.map(({ memberId, amount: a }: { memberId: string; amount: number }) => ({
+    splits = customSplits!.map(({ memberId, amount: a }) => ({
       memberId,
       amount: -Math.round(a * 100) / 100,
     }))
   } else {
     const totalCents = Math.round(Number(amount) * 100)
-    const n = splitAmong.length
-    const baseCents = Math.floor(totalCents / n)
-    const remainder = totalCents - baseCents * n
-
-    // Determine which members absorb the remainder cents.
-    const remainderSet = new Set<string>()
-    if (remainder > 0) {
-      const [groupPayers, groupSplits] = await Promise.all([
-        sql`SELECT ep.member_id, ep.amount FROM expense_payers ep JOIN expenses e ON e.id = ep.expense_id WHERE e.group_id = ${groupId}`,
-        sql`SELECT es.member_id, es.amount FROM expense_splits es JOIN expenses e ON e.id = es.expense_id WHERE e.group_id = ${groupId}`,
-      ])
-
-      const bal: Record<string, number> = {}
-      for (const id of splitAmong) bal[id] = 0
-      for (const p of groupPayers) {
-        if (p.member_id in bal) bal[p.member_id] += Number(p.amount)
-      }
-      for (const s of groupSplits) {
-        if (s.member_id in bal) bal[s.member_id] += Number(s.amount)
-      }
-
-      // Sort ascending: most negative balance = owes most
-      const sorted = [...splitAmong].sort((a: string, b: string) => bal[a] - bal[b])
-
-      let assigned = 0
-      let i = 0
-      while (assigned < remainder && i < sorted.length) {
-        const tierBal = bal[sorted[i]]
-        let j = i
-        while (j < sorted.length && bal[sorted[j]] === tierBal) j++
-        const tier = sorted.slice(i, j)
-        const needed = remainder - assigned
-        if (tier.length <= needed) {
-          for (const id of tier) remainderSet.add(id)
-          assigned += tier.length
-        } else {
-          // Randomize within the tied tier
-          const shuffled = [...tier].sort(() => Math.random() - 0.5)
-          for (const id of shuffled.slice(0, needed)) remainderSet.add(id)
-          assigned = remainder
-        }
-        i = j
-      }
-    }
-
-    splits = splitAmong.map((memberId: string) => ({
-      memberId,
-      amount: -(baseCents + (remainderSet.has(memberId) ? 1 : 0)) / 100,
-    }))
+    const balances = await fetchGroupBalances(groupId, memberIds)
+    const priorityOrder = sortByDebtPriority(memberIds, balances)
+    const cents = computeEqualSplitCents(totalCents, memberIds, priorityOrder)
+    splits = memberIds.map(memberId => ({ memberId, amount: -cents[memberId] / 100 }))
   }
 
   for (const s of splits) {
@@ -151,6 +136,38 @@ export async function POST(request: Request) {
     if (!splitResult) {
       await sql`DELETE FROM expenses WHERE id = ${expense.id}`
       return NextResponse.json({ error: 'Failed to create splits' }, { status: 500 })
+    }
+  }
+
+  // Attach receipt, if any. "Everyone in every item" (the seeded default below) reduces
+  // to exactly the equal split already inserted above, so no itemized computation runs here —
+  // only Phase 6's review endpoint (POST /api/receipts/review) needs computeItemizedSplitCents.
+  if (receipt) {
+    const hasItems = Array.isArray(receipt.items) && receipt.items.length > 0
+    const receiptRows = await sql`
+      INSERT INTO receipts (expense_id, image_url, cloudinary_public_id, raw_ocr_json, parsed_total, ocr_status)
+      VALUES (${expense.id}, ${receipt.imageUrl}, ${receipt.cloudinaryPublicId}, ${JSON.stringify(receipt.rawOcrJson ?? null)}, ${receipt.total ?? null}, ${hasItems ? 'ok' : 'no_items'})
+      RETURNING id
+    `
+    const receiptId = receiptRows[0]?.id
+
+    if (receiptId && hasItems) {
+      for (let i = 0; i < receipt.items.length; i++) {
+        const item = receipt.items[i]
+        const itemRows = await sql`
+          INSERT INTO receipt_items (receipt_id, description, amount, sort_order)
+          VALUES (${receiptId}, ${item.description}, ${Math.round(item.amount * 100) / 100}, ${i})
+          RETURNING id
+        `
+        const itemId = itemRows[0]?.id
+        if (!itemId) continue
+        for (const memberId of memberIds) {
+          await sql`INSERT INTO receipt_item_members (item_id, member_id) VALUES (${itemId}, ${memberId})`
+        }
+      }
+      for (const memberId of memberIds) {
+        await sql`INSERT INTO receipt_reviews (receipt_id, member_id) VALUES (${receiptId}, ${memberId})`
+      }
     }
   }
 

@@ -10,9 +10,10 @@ interface Props {
   isAdmin?: boolean
   onDelete?: (id: string) => void
   payerBalances?: Record<string, number>
+  onReview?: (expenseId: string) => void
 }
 
-export default function ExpenseCard({ expense, members, currency, isAdmin, onDelete, payerBalances }: Props) {
+export default function ExpenseCard({ expense, members, currency, isAdmin, onDelete, payerBalances, onReview }: Props) {
   const payer = members.find(m => m.id === expense.paid_by)
   const enteredBy = members.find(m => m.id === expense.entered_by)
   const isMultiPayer = (expense.payers?.length ?? 0) > 1
@@ -108,6 +109,14 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
           )}
         </div>
       </div>
+      {expense.review_pending && onReview && (
+        <button
+          onClick={() => onReview(expense.id)}
+          className="text-xs text-accent font-medium mt-1"
+        >
+          Review receipt →
+        </button>
+      )}
       <div className="flex items-end justify-between mt-2 gap-2">
         <p className="text-xs text-ink-muted whitespace-nowrap overflow-hidden">{dateStr}</p>
         {!isSettlement && (

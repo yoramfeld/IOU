@@ -24,6 +24,24 @@ export interface Expense {
   entered_by: string
   created_at: string
   payers?: ExpensePayer[]
+  receipt_id?: string | null
+  has_receipt?: boolean
+  review_pending?: boolean
+}
+
+export interface ReceiptItem {
+  id: string
+  description: string
+  amount: number
+  memberCount: number
+  included: boolean
+}
+
+export interface ReceiptDetail {
+  id: string
+  imageUrl: string
+  parsedTotal: number | null
+  items: ReceiptItem[]
 }
 
 export interface ExpenseSplit {

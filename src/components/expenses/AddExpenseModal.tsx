@@ -3,7 +3,16 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Member } from '@/types'
 
+interface ReceiptPayload {
+  imageUrl: string
+  cloudinaryPublicId: string
+  rawOcrJson?: unknown
+  total: number | null
+  items: { description: string; amount: number }[]
+}
+
 interface Props {
+  groupId: string
   members: Member[]
   currentMemberId: string
   isAdmin: boolean
@@ -16,6 +25,7 @@ interface Props {
     splitAmong: string[]
     customSplits?: { memberId: string; amount: number }[]
     payers: { memberId: string; amount: number }[]
+    receipt?: ReceiptPayload
   }) => Promise<void>
   onClose: () => void
 }
@@ -26,7 +36,7 @@ function readSavedTip(): number {
   try { return parseInt(localStorage.getItem('iou_tip_pct') || '0', 10) || 0 } catch { return 0 }
 }
 
-export default function AddExpenseModal({ members, currentMemberId, isAdmin, currency, memberBalances, onSubmit, onClose }: Props) {
+export default function AddExpenseModal({ groupId, members, currentMemberId, isAdmin, currency, memberBalances, onSubmit, onClose }: Props) {
   // Sort by biggest debt first (most negative balance), randomize ties — fixed on open
   const [sortedMembers] = useState<Member[]>(() => {
     const shuffled = [...members].sort(() => Math.random() - 0.5)
@@ -50,10 +60,106 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
   const [error, setError] = useState('')
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Receipt upload / OCR — all optional, additive to the flow above.
+  const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null)
+  const [cloudinaryPublicId, setCloudinaryPublicId] = useState<string | null>(null)
+  const [receiptItems, setReceiptItems] = useState<{ description: string; amount: string }[]>([])
+  const [ocrRaw, setOcrRaw] = useState<unknown>(null)
+  const [receiptStatus, setReceiptStatus] = useState<'idle' | 'uploading' | 'scanning' | 'error'>('idle')
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
   function showError(msg: string) {
     setError(msg)
     if (errorTimer.current) clearTimeout(errorTimer.current)
     errorTimer.current = setTimeout(() => setError(''), 2000)
+  }
+
+  // Downscale to keep the upload light and speed up OCR; still legible for row totals.
+  function compressImage(file: File): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        const maxDim = 1600
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { reject(new Error('canvas unavailable')); return }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        URL.revokeObjectURL(url)
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('compression failed')), 'image/jpeg', 0.8)
+      }
+      img.onerror = () => reject(new Error('failed to load image'))
+      img.src = url
+    })
+  }
+
+  function uploadToCloudinary(blob: Blob, params: { signature: string; timestamp: number; folder: string; apiKey: string; cloudName: string }): Promise<{ secure_url: string; public_id: string }> {
+    return new Promise((resolve, reject) => {
+      const form = new FormData()
+      form.append('file', blob)
+      form.append('api_key', params.apiKey)
+      form.append('timestamp', String(params.timestamp))
+      form.append('signature', params.signature)
+      form.append('folder', params.folder)
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `https://api.cloudinary.com/v1_1/${params.cloudName}/image/upload`)
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText))
+        else reject(new Error('Cloudinary upload failed'))
+      }
+      xhr.onerror = () => reject(new Error('Cloudinary upload failed'))
+      xhr.send(form)
+    })
+  }
+
+  async function handleReceiptFile(file: File) {
+    setReceiptStatus('uploading')
+    try {
+      const compressed = await compressImage(file)
+      const signRes = await fetch('/api/receipts/sign-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId, memberId: currentMemberId }),
+      })
+      if (!signRes.ok) throw new Error('sign failed')
+      const signData = await signRes.json()
+      const uploaded = await uploadToCloudinary(compressed, signData)
+
+      setReceiptImageUrl(uploaded.secure_url)
+      setCloudinaryPublicId(uploaded.public_id)
+      setReceiptStatus('scanning')
+
+      const ocrRes = await fetch('/api/receipts/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId, memberId: currentMemberId, imageUrl: uploaded.secure_url }),
+      })
+      if (!ocrRes.ok) throw new Error('ocr failed')
+      const ocrData: { items: { description: string; amount: number }[]; total: number | null; raw: unknown } = await ocrRes.json()
+
+      setReceiptItems(ocrData.items.map(it => ({ description: it.description, amount: String(it.amount) })))
+      setOcrRaw(ocrData.raw)
+      if (ocrData.total && !amount) handleBillChange(String(ocrData.total))
+      setReceiptStatus('idle')
+    } catch {
+      setReceiptStatus('error')
+      showError('Could not scan receipt')
+    }
+  }
+
+  function updateReceiptItem(idx: number, field: 'description' | 'amount', value: string) {
+    setReceiptItems(prev => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)))
+  }
+
+  function removeReceiptItem(idx: number) {
+    setReceiptItems(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  function addReceiptItem() {
+    setReceiptItems(prev => [...prev, { description: `Row ${prev.length + 1}`, amount: '' }])
   }
 
   function toggleExclude(memberId: string) {
@@ -204,6 +310,10 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
 
   const paidBy = payers[0]?.memberId ?? currentMemberId
 
+  // --- Receipt items vs bill ---
+  const itemsTotal = receiptItems.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0)
+  const itemsOvershoot = receiptItems.length > 0 && billVal > 0 ? Math.round((itemsTotal - billVal) * 100) / 100 : 0
+
   async function handleSubmit() {
     if (!description.trim()) { showError('Enter a description'); return }
     if (computedCustomSplits.length === 0) { showError('Enter at least one ordered amount'); return }
@@ -213,6 +323,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         : `${currency}${-orderedUnassigned} over`)
       return
     }
+    if (itemsOvershoot > 0) { showError(`Items exceed bill by ${currency}${itemsOvershoot}`); return }
     if (payers.length === 0) { showError('Enter who paid'); return }
     if (unassigned !== 0) {
       showError(unassigned > 0
@@ -223,6 +334,17 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
     setSubmitting(true)
     setError('')
     try {
+      const validReceiptItems = receiptItems.filter(it => (parseFloat(it.amount) || 0) > 0)
+      const receipt: ReceiptPayload | undefined = receiptImageUrl && cloudinaryPublicId
+        ? {
+            imageUrl: receiptImageUrl,
+            cloudinaryPublicId,
+            rawOcrJson: ocrRaw,
+            total: billVal > 0 ? billVal : null,
+            // Manual split overrides and itemized-consumption review are mutually exclusive
+            items: isManualSplit ? [] : validReceiptItems.map(it => ({ description: it.description, amount: parseFloat(it.amount) })),
+          }
+        : undefined
       await onSubmit({
         paidBy,
         amount: finalTotal,
@@ -230,6 +352,7 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
         splitAmong: computedCustomSplits.map(s => s.memberId),
         customSplits: computedCustomSplits,
         payers,
+        receipt,
       })
       onClose()
     } catch {
@@ -250,7 +373,28 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
 
         {/* Description */}
         <div>
-          <label className="text-xs font-medium text-ink-soft block mb-2">Description</label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-medium text-ink-soft">Description</label>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={receiptStatus === 'uploading' || receiptStatus === 'scanning'}
+              className="text-xs text-accent font-medium disabled:opacity-50"
+            >
+              {receiptStatus === 'uploading' ? 'Uploading…' : receiptStatus === 'scanning' ? 'Scanning…' : receiptImageUrl ? 'Re-upload' : 'Upload receipt'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0]
+                if (file) handleReceiptFile(file)
+                e.target.value = ''
+              }}
+            />
+          </div>
           <input
             className="input"
             placeholder="What was it for?"
@@ -260,6 +404,47 @@ export default function AddExpenseModal({ members, currentMemberId, isAdmin, cur
             autoFocus
           />
         </div>
+
+        {receiptImageUrl && (
+          <div className="space-y-2">
+            <div className="flex gap-3 items-start">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={receiptImageUrl} alt="Receipt" className="w-16 h-16 object-cover rounded-lg border border-border shrink-0" />
+              <div className="flex-1 space-y-1.5 min-w-0">
+                {receiptItems.map((it, idx) => (
+                  <div key={idx} className="flex gap-1.5 items-center">
+                    <input
+                      className="input py-1 text-xs flex-1 min-w-0"
+                      value={it.description}
+                      onChange={e => updateReceiptItem(idx, 'description', e.target.value)}
+                      onFocus={selectAll}
+                    />
+                    <div className="relative w-16 shrink-0">
+                      <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-ink-muted text-[10px]">{currency}</span>
+                      <input
+                        className="input py-1 text-xs w-full pl-4 pr-1"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={it.amount}
+                        onChange={e => updateReceiptItem(idx, 'amount', e.target.value)}
+                        onFocus={selectAll}
+                      />
+                    </div>
+                    <button type="button" onClick={() => removeReceiptItem(idx)} className="text-ink-muted text-xs px-1">&times;</button>
+                  </div>
+                ))}
+                <button type="button" onClick={addReceiptItem} className="text-xs text-accent font-medium">+ Add row</button>
+              </div>
+            </div>
+            {receiptItems.length > 0 && billVal > 0 && (
+              <p className="text-xs text-ink-muted text-right">
+                Items {currency}{Math.round(itemsTotal * 100) / 100}
+                {itemsOvershoot > 0 && <span className="text-red"> — {currency}{itemsOvershoot} over bill</span>}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Bill | Tip | Total+Roundup */}
         <div className="flex gap-2 items-end">

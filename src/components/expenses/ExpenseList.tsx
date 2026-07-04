@@ -10,9 +10,10 @@ interface Props {
   isAdmin?: boolean
   onDelete?: (id: string) => void
   payerBalances?: Record<string, Record<string, number>>
+  onReview?: (expenseId: string) => void
 }
 
-export default function ExpenseList({ expenses, members, currency, isAdmin, onDelete, payerBalances }: Props) {
+export default function ExpenseList({ expenses, members, currency, isAdmin, onDelete, payerBalances, onReview }: Props) {
   if (expenses.length === 0) {
     return (
       <div className="text-center py-12 text-ink-muted">
@@ -34,6 +35,7 @@ export default function ExpenseList({ expenses, members, currency, isAdmin, onDe
           isAdmin={isAdmin}
           onDelete={onDelete}
           payerBalances={payerBalances?.[expense.id]}
+          onReview={onReview}
         />
       ))}
     </div>
