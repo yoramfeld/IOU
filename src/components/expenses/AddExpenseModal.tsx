@@ -70,10 +70,10 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
   const [receiptStatus, setReceiptStatus] = useState<'idle' | 'uploading' | 'scanning' | 'error'>('idle')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  function showError(msg: string) {
+  function showError(msg: string, durationMs = 2000) {
     setError(msg)
     if (errorTimer.current) clearTimeout(errorTimer.current)
-    errorTimer.current = setTimeout(() => setError(''), 2000)
+    errorTimer.current = setTimeout(() => setError(''), durationMs)
   }
 
   // Downscale to keep the upload light and speed up OCR; still legible for row totals.
@@ -119,27 +119,36 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
 
   async function handleReceiptFile(file: File) {
     setReceiptStatus('uploading')
+    let stage = 'compressing image'
     try {
       const compressed = await compressImage(file)
+
+      stage = 'getting upload signature'
       const signRes = await fetch('/api/receipts/sign-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ groupId, memberId: currentMemberId }),
       })
-      if (!signRes.ok) throw new Error('sign failed')
+      if (!signRes.ok) throw new Error(`sign-upload ${signRes.status}`)
       const signData = await signRes.json()
+
+      stage = 'uploading to Cloudinary'
       const uploaded = await uploadToCloudinary(compressed, signData)
 
       setReceiptImageUrl(uploaded.secure_url)
       setCloudinaryPublicId(uploaded.public_id)
       setReceiptStatus('scanning')
 
+      stage = 'scanning receipt'
       const ocrRes = await fetch('/api/receipts/ocr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ groupId, memberId: currentMemberId, imageUrl: uploaded.secure_url }),
       })
-      if (!ocrRes.ok) throw new Error('ocr failed')
+      if (!ocrRes.ok) {
+        const errData = await ocrRes.json().catch(() => ({}))
+        throw new Error(errData.debug || errData.error || `ocr ${ocrRes.status}`)
+      }
       const ocrData: { items: { description: string; amount: number; yCenterPct: number | null }[]; total: number | null; direction: 'ltr' | 'rtl'; raw: unknown } = await ocrRes.json()
 
       setReceiptItems(ocrData.items.map(it => ({ description: it.description, amount: String(it.amount), yCenterPct: it.yCenterPct })))
@@ -147,9 +156,9 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
       setOcrRaw(ocrData.raw)
       if (ocrData.total && !amount) handleBillChange(String(ocrData.total))
       setReceiptStatus('idle')
-    } catch {
+    } catch (err) {
       setReceiptStatus('error')
-      showError('Could not scan receipt')
+      showError(`Failed at ${stage}: ${err instanceof Error ? err.message : String(err)}`, 15000)
     }
   }
 
