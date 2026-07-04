@@ -3,6 +3,10 @@ import { sql } from '@/lib/db'
 import { extractReceiptRows } from '@/lib/ocr'
 
 export const dynamic = 'force-dynamic'
+// Gemini's vision+thinking response can take several seconds on a real (larger, more
+// detailed) photo, plus the time to fetch and base64-encode the image server-side —
+// comfortably past Vercel's 10s default function timeout. Raise it explicitly.
+export const maxDuration = 60
 
 export async function POST(request: Request) {
   const { groupId, memberId, imageUrl } = await request.json()
