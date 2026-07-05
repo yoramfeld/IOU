@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
   try {
     const { rows, total, direction, raw } = await extractReceiptRows(imageUrl)
-    const items = rows.map((row, i) => ({ description: `Row ${i + 1}`, amount: row.amount, yCenterPct: row.yCenterPct }))
+    const items = rows.map(row => ({ description: row.description, amount: row.amount, yCenterPct: row.yCenterPct }))
     return NextResponse.json({ items, total, direction, raw })
   } catch (err) {
     if (err instanceof OcrRateLimitError) {
