@@ -119,8 +119,9 @@ export default function ReviewReceiptModal({ receiptId, memberId, currency, onCl
                       type="button"
                       disabled={disabled}
                       onClick={() => toggle(item.id)}
-                      aria-label={`${item.description}, ${currency}${item.amount}${excluded ? ' — excluded' : ''}`}
-                      className="absolute left-0 right-0 flex items-center"
+                      title={disabled ? "You're the only one on this item — someone has to be" : undefined}
+                      aria-label={`${item.description}, ${currency}${item.amount}${excluded ? ' — excluded' : disabled ? ' — required, you are the only member on this item' : ''}`}
+                      className={`absolute left-0 right-0 flex items-center ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                       style={{
                         top: `${item.yCenterPct! - bandHalfPct}%`,
                         height: `${bandHalfPct * 2}%`,
@@ -131,6 +132,9 @@ export default function ReviewReceiptModal({ receiptId, memberId, currency, onCl
                       )}
                       {excluded && (
                         <span className="absolute inset-0 bg-white/40 pointer-events-none" />
+                      )}
+                      {disabled && !excluded && (
+                        <span className="absolute inset-y-0 right-0 flex items-center pr-0.5 text-[9px] text-ink-muted pointer-events-none">🔒</span>
                       )}
                     </button>
                   )
