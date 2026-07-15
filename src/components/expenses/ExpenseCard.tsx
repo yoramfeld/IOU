@@ -13,26 +13,44 @@ interface Props {
   onReview?: (expenseId: string) => void
 }
 
-export default function ExpenseCard({ expense, members, currency, isAdmin, onDelete, payerBalances, onReview }: Props) {
-  const payer = members.find(m => m.id === expense.paid_by)
-  const enteredBy = members.find(m => m.id === expense.entered_by)
+export default function ExpenseCard({
+  expense,
+  members,
+  currency,
+  isAdmin,
+  onDelete,
+  payerBalances,
+  onReview,
+}: Props) {
+  const payer = members.find((m) => m.id === expense.paid_by)
+  const enteredBy = members.find((m) => m.id === expense.entered_by)
   const isMultiPayer = (expense.payers?.length ?? 0) > 1
   const splitPairs = expense.splits
-    .map(s => ({ member: members.find(m => m.id === s.member_id), amount: s.amount }))
-    .filter(p => p.member != null) as { member: Member; amount: number | string }[]
+    .map((s) => ({
+      member: members.find((m) => m.id === s.member_id),
+      amount: s.amount,
+    }))
+    .filter((p) => p.member != null) as {
+    member: Member
+    amount: number | string
+  }[]
 
-  const isUnequal = splitPairs.length > 1 &&
-    splitPairs.some(p => Number(p.amount) !== Number(splitPairs[0].amount))
+  const isUnequal =
+    splitPairs.length > 1 &&
+    splitPairs.some((p) => Number(p.amount) !== Number(splitPairs[0].amount))
 
   // Group members by their rounded amount for display
   const groupedSplits: { amount: number; names: string[] }[] = isUnequal
     ? Object.entries(
-        splitPairs.reduce((acc, { member, amount }) => {
-          const key = Math.round(Number(amount) * 100) / 100
-          if (!acc[key]) acc[key] = []
-          acc[key].push(member.name)
-          return acc
-        }, {} as Record<number, string[]>)
+        splitPairs.reduce(
+          (acc, { member, amount }) => {
+            const key = Math.round(Number(amount) * 100) / 100
+            if (!acc[key]) acc[key] = []
+            acc[key].push(member.name)
+            return acc
+          },
+          {} as Record<number, string[]>,
+        ),
       )
         .map(([amount, names]) => ({ amount: Number(amount), names }))
         .sort((a, b) => b.amount - a.amount)
@@ -52,14 +70,26 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
             {isSettlement ? (
               <>
                 <p className="font-semibold text-sm">Settlement</p>
-                {(expense.payers ?? [{ member_id: expense.paid_by, amount: expense.amount }]).map(p => {
-                  const m = members.find(x => x.id === p.member_id)
+                {(
+                  expense.payers ?? [
+                    { member_id: expense.paid_by, amount: expense.amount },
+                  ]
+                ).map((p) => {
+                  const m = members.find((x) => x.id === p.member_id)
                   const bal = payerBalances?.[p.member_id]
                   return (
-                    <p key={p.member_id} className="text-xs text-ink-muted whitespace-nowrap overflow-hidden">
-                      <span>{m?.name} paid {splitPairs[0]?.member.name} and now at </span>
+                    <p
+                      key={p.member_id}
+                      className="text-xs text-ink-muted whitespace-nowrap overflow-hidden"
+                    >
+                      <span>
+                        {m?.name} paid {splitPairs[0]?.member.name} and now
+                        at{' '}
+                      </span>
                       {bal !== undefined && (
-                        <span className={`font-medium ${bal >= 0 ? 'text-green' : 'text-red'}`}>
+                        <span
+                          className={`font-medium ${bal >= 0 ? 'text-green' : 'text-red'}`}
+                        >
                           {`${bal >= 0 ? '+' : '-'}${currency}${Math.abs(Math.round(bal))}`}
                         </span>
                       )}
@@ -69,19 +99,33 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
               </>
             ) : (
               <>
-                <p className="font-semibold text-sm truncate">{expense.description}</p>
-                {(expense.payers ?? [{ member_id: expense.paid_by, amount: expense.amount }]).map(p => {
-                  const m = members.find(x => x.id === p.member_id)
+                <p className="font-semibold text-sm truncate">
+                  {expense.description}
+                </p>
+                {(
+                  expense.payers ?? [
+                    { member_id: expense.paid_by, amount: expense.amount },
+                  ]
+                ).map((p) => {
+                  const m = members.find((x) => x.id === p.member_id)
                   const bal = payerBalances?.[p.member_id]
                   return (
-                    <p key={p.member_id} className="text-xs text-ink-muted whitespace-nowrap overflow-hidden">
+                    <p
+                      key={p.member_id}
+                      className="text-xs text-ink-muted whitespace-nowrap overflow-hidden"
+                    >
                       {isMultiPayer ? (
-                        <span>{m?.name} paid {currency}{Math.round(Number(p.amount))}</span>
+                        <span>
+                          {m?.name} paid {currency}
+                          {Math.round(Number(p.amount))}
+                        </span>
                       ) : (
                         <>
                           <span>{m?.name} paid and now at </span>
                           {bal !== undefined && (
-                            <span className={`font-medium ${bal >= 0 ? 'text-green' : 'text-red'}`}>
+                            <span
+                              className={`font-medium ${bal >= 0 ? 'text-green' : 'text-red'}`}
+                            >
                               {`${bal >= 0 ? '+' : '-'}${currency}${Math.abs(Math.round(bal))}`}
                             </span>
                           )}
@@ -91,14 +135,19 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
                   )
                 })}
                 {onBehalf && enteredBy && (
-                  <p className="text-xs text-ink-muted italic">(entered by {enteredBy.name})</p>
+                  <p className="text-xs text-ink-muted italic">
+                    (entered by {enteredBy.name})
+                  </p>
                 )}
               </>
             )}
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="font-bold text-sm">{currency}{Math.round(Number(expense.amount))}</p>
+          <p className="font-bold text-sm">
+            {currency}
+            {Math.round(Number(expense.amount))}
+          </p>
           {isAdmin && onDelete && (
             <button
               onClick={() => onDelete(expense.id)}
@@ -109,31 +158,51 @@ export default function ExpenseCard({ expense, members, currency, isAdmin, onDel
           )}
         </div>
       </div>
-      {expense.review_pending && onReview && (
+      {expense.review_pending && onReview ? (
         <button
           onClick={() => onReview(expense.id)}
           className="text-xs text-accent font-medium mt-1"
         >
           Review receipt →
         </button>
+      ) : (
+        expense.has_receipt && (
+          <p className="text-xs text-ink-muted mt-1">
+            {expense.receipt_ocr_status === 'pending' ||
+            expense.receipt_ocr_status === 'processing'
+              ? 'Receipt processing...'
+              : expense.receipt_ocr_status === 'error'
+                ? 'Receipt scan failed'
+                : expense.receipt_ocr_status === 'no_items'
+                  ? 'Receipt attached'
+                  : 'Receipt reviewed'}
+          </p>
+        )
       )}
       <div className="flex items-end justify-between mt-2 gap-2">
-        <p className="text-xs text-ink-muted whitespace-nowrap overflow-hidden">{dateStr}</p>
+        <p className="text-xs text-ink-muted whitespace-nowrap overflow-hidden">
+          {dateStr}
+        </p>
         {!isSettlement && (
           <div className="flex gap-1 flex-wrap justify-end">
-            {isUnequal ? (
-              groupedSplits.map(({ amount, names }) => (
-                <span key={amount} className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full">
-                  {names.join(', ')}: {currency}{amount % 1 === 0 ? amount : amount.toFixed(2)}
-                </span>
-              ))
-            ) : (
-              splitPairs.map(({ member: m }) => (
-                <span key={m.id} className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full">
-                  {m.name}
-                </span>
-              ))
-            )}
+            {isUnequal
+              ? groupedSplits.map(({ amount, names }) => (
+                  <span
+                    key={amount}
+                    className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full"
+                  >
+                    {names.join(', ')}: {currency}
+                    {amount % 1 === 0 ? amount : amount.toFixed(2)}
+                  </span>
+                ))
+              : splitPairs.map(({ member: m }) => (
+                  <span
+                    key={m.id}
+                    className="text-xs bg-surface text-ink-muted px-2 py-0.5 rounded-full"
+                  >
+                    {m.name}
+                  </span>
+                ))}
           </div>
         )}
       </div>

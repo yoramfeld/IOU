@@ -17,19 +17,25 @@ export default function ExpensesPage() {
   const router = useRouter()
   const { session, loading, logout } = useSession()
   const { adminMode, setAdminMode, loaded: adminLoaded } = useAdminMode()
-  const [expenses, setExpenses] = useState<(Expense & { splits: ExpenseSplit[]; payers: ExpensePayer[] })[]>([])
+  const [expenses, setExpenses] = useState<
+    (Expense & { splits: ExpenseSplit[]; payers: ExpensePayer[] })[]
+  >([])
   const [members, setMembers] = useState<Member[]>([])
   const [showModal, setShowModal] = useState(false)
   const [showQRModal, setShowQRModal] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
-  const [reviewingExpenseId, setReviewingExpenseId] = useState<string | null>(null)
+  const [reviewingExpenseId, setReviewingExpenseId] = useState<string | null>(
+    null,
+  )
 
   const fetchData = useCallback(async () => {
     if (!session) return
     try {
       const t = Date.now()
       const [expRes, memRes] = await Promise.all([
-        fetch(`/api/expenses?groupId=${session.groupId}&memberId=${session.memberId}&_t=${t}`),
+        fetch(
+          `/api/expenses?groupId=${session.groupId}&memberId=${session.memberId}&_t=${t}`,
+        ),
         fetch(`/api/members?groupId=${session.groupId}&_t=${t}`),
       ])
       if (expRes.ok) setExpenses(await expRes.json())
@@ -54,7 +60,11 @@ export default function ExpensesPage() {
     splitAmong: string[]
     customSplits?: { memberId: string; amount: number }[]
     payers: { memberId: string; amount: number }[]
-    receipt?: { imageUrl: string; cloudinaryPublicId: string; rawOcrJson?: unknown; total: number | null; direction: 'ltr' | 'rtl'; items: { description: string; amount: number; yCenterPct: number | null }[] }
+    receipt?: {
+      imageUrl: string
+      cloudinaryPublicId: string
+      itemize: boolean
+    }
   }) {
     if (!session) return
     const res = await fetch('/api/expenses', {
@@ -73,7 +83,22 @@ export default function ExpensesPage() {
       }),
     })
     if (!res.ok) throw new Error('Failed')
+    const result: { receiptId?: string | null; receiptOcrPending?: boolean } =
+      await res.json()
     await fetchData()
+
+    if (result.receiptId && result.receiptOcrPending) {
+      void fetch('/api/receipts/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receiptId: result.receiptId,
+          memberId: session.memberId,
+        }),
+      }).finally(() => fetchData())
+    }
+
+    return result
   }
 
   async function handleDelete(expenseId: string) {
@@ -91,7 +116,9 @@ export default function ExpensesPage() {
     const balances: Record<string, number> = {}
 
     for (const exp of expenses) {
-      const effectivePayers = exp.payers?.length ? exp.payers : [{ member_id: exp.paid_by, amount: exp.amount }]
+      const effectivePayers = exp.payers?.length
+        ? exp.payers
+        : [{ member_id: exp.paid_by, amount: exp.amount }]
       for (const p of effectivePayers) {
         balances[p.member_id] = (balances[p.member_id] || 0) + Number(p.amount)
       }
@@ -103,7 +130,9 @@ export default function ExpensesPage() {
     // Each expense card shows the payer's current total balance
     const map: Record<string, Record<string, number>> = {}
     for (const exp of expenses) {
-      const payerIds = exp.payers?.length ? exp.payers.map(p => p.member_id) : [exp.paid_by]
+      const payerIds = exp.payers?.length
+        ? exp.payers.map((p) => p.member_id)
+        : [exp.paid_by]
       map[exp.id] = {}
       for (const id of payerIds) {
         map[exp.id][id] = Math.round((balances[id] || 0) * 100) / 100
@@ -113,7 +142,11 @@ export default function ExpensesPage() {
   }, [expenses])
 
   if (loading || !adminLoaded) {
-    return <div className="phone-frame flex items-center justify-center min-h-dvh text-ink-muted">Loading...</div>
+    return (
+      <div className="phone-frame flex items-center justify-center min-h-dvh text-ink-muted">
+        Loading...
+      </div>
+    )
   }
 
   if (!session) return null
@@ -123,12 +156,13 @@ export default function ExpensesPage() {
       <header className="sticky top-0 bg-white/80 backdrop-blur-sm border-b border-border z-10 px-4 py-3">
         <div className="flex items-center justify-between">
           <div>
-            <Link href="/" className="font-bold text-lg hover:text-accent transition-colors">
+            <Link
+              href="/"
+              className="font-bold text-lg hover:text-accent transition-colors"
+            >
               {session.groupName}
             </Link>
-            <p className="text-xs text-ink-muted">
-              {session.name}
-            </p>
+            <p className="text-xs text-ink-muted">{session.name}</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -137,13 +171,40 @@ export default function ExpensesPage() {
               title="QR join"
             >
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <rect x="2" y="2" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-                <rect x="4" y="4" width="2" height="2" fill="currentColor"/>
-                <rect x="12" y="2" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-                <rect x="14" y="4" width="2" height="2" fill="currentColor"/>
-                <rect x="2" y="12" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-                <rect x="4" y="14" width="2" height="2" fill="currentColor"/>
-                <path d="M12 12h2v2h-2zM14 14h2v2h-2zM16 12h2v2h-2zM12 16h2v2h-2zM16 16h2v2h-2z" fill="currentColor"/>
+                <rect
+                  x="2"
+                  y="2"
+                  width="6"
+                  height="6"
+                  rx="1"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <rect x="4" y="4" width="2" height="2" fill="currentColor" />
+                <rect
+                  x="12"
+                  y="2"
+                  width="6"
+                  height="6"
+                  rx="1"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <rect x="14" y="4" width="2" height="2" fill="currentColor" />
+                <rect
+                  x="2"
+                  y="12"
+                  width="6"
+                  height="6"
+                  rx="1"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <rect x="4" y="14" width="2" height="2" fill="currentColor" />
+                <path
+                  d="M12 12h2v2h-2zM14 14h2v2h-2zM16 12h2v2h-2zM12 16h2v2h-2zM16 16h2v2h-2z"
+                  fill="currentColor"
+                />
               </svg>
             </button>
             <button
@@ -156,14 +217,19 @@ export default function ExpensesPage() {
         </div>
         {session.isAdmin && (
           <div className="mt-2">
-            <AdminModeToggle adminMode={adminMode} setAdminMode={setAdminMode} />
+            <AdminModeToggle
+              adminMode={adminMode}
+              setAdminMode={setAdminMode}
+            />
           </div>
         )}
       </header>
 
       <main className="p-4">
         {loadingData ? (
-          <p className="text-center text-ink-muted py-12">Loading expenses...</p>
+          <p className="text-center text-ink-muted py-12">
+            Loading expenses...
+          </p>
         ) : (
           <ExpenseList
             expenses={expenses}
@@ -172,7 +238,7 @@ export default function ExpensesPage() {
             isAdmin={session.isAdmin && adminMode}
             onDelete={handleDelete}
             payerBalances={payerBalances}
-            onReview={id => setReviewingExpenseId(id)}
+            onReview={(id) => setReviewingExpenseId(id)}
           />
         )}
       </main>
@@ -198,17 +264,27 @@ export default function ExpensesPage() {
         />
       )}
 
-      {reviewingExpenseId && expenses.find(e => e.id === reviewingExpenseId)?.receipt_id && (
-        <ReviewReceiptModal
-          receiptId={expenses.find(e => e.id === reviewingExpenseId)!.receipt_id!}
-          memberId={session.memberId}
-          currency={session.currency}
-          onClose={() => setReviewingExpenseId(null)}
-          onSubmitted={() => { setReviewingExpenseId(null); fetchData() }}
-        />
-      )}
+      {reviewingExpenseId &&
+        expenses.find((e) => e.id === reviewingExpenseId)?.receipt_id && (
+          <ReviewReceiptModal
+            receiptId={
+              expenses.find((e) => e.id === reviewingExpenseId)!.receipt_id!
+            }
+            memberId={session.memberId}
+            currency={session.currency}
+            onClose={() => setReviewingExpenseId(null)}
+            onSubmitted={() => {
+              setReviewingExpenseId(null)
+              fetchData()
+            }}
+          />
+        )}
 
-      <BottomNav active="expenses" isAdmin={session.isAdmin} groupId={session.groupId} />
+      <BottomNav
+        active="expenses"
+        isAdmin={session.isAdmin}
+        groupId={session.groupId}
+      />
     </div>
   )
 }

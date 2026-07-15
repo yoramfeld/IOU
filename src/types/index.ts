@@ -27,6 +27,7 @@ export interface Expense {
   receipt_id?: string | null
   has_receipt?: boolean
   review_pending?: boolean
+  receipt_ocr_status?: string | null
 }
 
 export interface ReceiptItem {
@@ -41,7 +42,12 @@ export interface ReceiptItem {
 export interface ReceiptDetail {
   id: string
   imageUrl: string
+  merchantName: string | null
   parsedTotal: number | null
+  subtotal: number | null
+  tax: number | null
+  tip: number | null
+  ocrStatus: string
   direction: 'ltr' | 'rtl'
   items: ReceiptItem[]
 }

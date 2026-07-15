@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   }
 
   const receiptRows = await sql`
-    SELECT r.id, r.image_url, r.parsed_total, r.direction, e.group_id
+    SELECT r.id, r.image_url, r.raw_ocr_json, r.parsed_total, r.direction, r.ocr_status, e.group_id
     FROM receipts r
     JOIN expenses e ON e.id = r.expense_id
     WHERE r.id = ${receiptId}
@@ -24,9 +24,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Receipt not found' }, { status: 404 })
   }
 
-  const memberRows = await sql`SELECT id FROM members WHERE id = ${memberId} AND group_id = ${receipt.group_id} LIMIT 1`
+  const memberRows =
+    await sql`SELECT id FROM members WHERE id = ${memberId} AND group_id = ${receipt.group_id} LIMIT 1`
   if (memberRows.length === 0) {
-    return NextResponse.json({ error: 'Not a member of this group' }, { status: 403 })
+    return NextResponse.json(
+      { error: 'Not a member of this group' },
+      { status: 403 },
+    )
   }
 
   const items = await sql`
@@ -39,12 +43,27 @@ export async function GET(request: Request) {
     ORDER BY ri.sort_order
   `
 
+  const parsed =
+    receipt.raw_ocr_json?.parsed &&
+    typeof receipt.raw_ocr_json.parsed === 'object'
+      ? receipt.raw_ocr_json.parsed
+      : null
+
   return NextResponse.json({
     id: receipt.id,
     imageUrl: receipt.image_url,
-    parsedTotal: receipt.parsed_total,
+    merchantName:
+      typeof parsed?.merchantName === 'string' && parsed.merchantName.trim()
+        ? parsed.merchantName
+        : null,
+    parsedTotal:
+      receipt.parsed_total !== null ? Number(receipt.parsed_total) : null,
+    subtotal: typeof parsed?.subtotal === 'number' ? parsed.subtotal : null,
+    tax: typeof parsed?.tax === 'number' ? parsed.tax : null,
+    tip: typeof parsed?.tip === 'number' ? parsed.tip : null,
+    ocrStatus: receipt.ocr_status,
     direction: receipt.direction === 'rtl' ? 'rtl' : 'ltr',
-    items: items.map(it => ({
+    items: items.map((it) => ({
       id: it.id,
       description: it.description,
       amount: Number(it.amount),

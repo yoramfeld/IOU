@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { fetchGroupBalances, sortByDebtPriority, computeEqualSplitCents } from '@/lib/splitAlgorithm'
+import {
+  fetchGroupBalances,
+  sortByDebtPriority,
+  computeEqualSplitCents,
+} from '@/lib/splitAlgorithm'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +23,7 @@ export async function GET(request: Request) {
       COALESCE((SELECT json_agg(ep.*) FROM expense_payers ep WHERE ep.expense_id = e.id), '[]'::json) AS payers,
       COALESCE((SELECT json_agg(es.*) FROM expense_splits es WHERE es.expense_id = e.id), '[]'::json) AS splits,
       r.id AS receipt_id,
+      r.ocr_status AS receipt_ocr_status,
       (r.id IS NOT NULL) AS has_receipt,
       CASE WHEN ${memberId}::uuid IS NULL THEN false ELSE EXISTS (
         SELECT 1 FROM receipt_reviews rr
@@ -36,14 +41,21 @@ export async function GET(request: Request) {
 interface ReceiptInput {
   imageUrl: string
   cloudinaryPublicId: string
-  rawOcrJson?: unknown
-  total?: number | null
-  direction?: 'ltr' | 'rtl'
-  items: { description: string; amount: number; yCenterPct: number | null }[]
+  itemize?: boolean
 }
 
 export async function POST(request: Request) {
-  const { groupId, paidBy, amount, description, splitAmong, customSplits, enteredBy, payers, receipt } = await request.json() as {
+  const {
+    groupId,
+    paidBy,
+    amount,
+    description,
+    splitAmong,
+    customSplits,
+    enteredBy,
+    payers,
+    receipt,
+  } = (await request.json()) as {
     groupId: string
     paidBy: string
     amount: number
@@ -64,16 +76,23 @@ export async function POST(request: Request) {
   }
 
   if (amount <= 0) {
-    return NextResponse.json({ error: 'Amount must be positive' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'Amount must be positive' },
+      { status: 400 },
+    )
   }
 
   // Validate payers if provided
-  const resolvedPayers: { memberId: string; amount: number }[] = Array.isArray(payers) && payers.length > 0
-    ? payers
-    : [{ memberId: paidBy, amount: Number(amount) }]
+  const resolvedPayers: { memberId: string; amount: number }[] =
+    Array.isArray(payers) && payers.length > 0
+      ? payers
+      : [{ memberId: paidBy, amount: Number(amount) }]
 
-  if (resolvedPayers.some(p => p.amount <= 0)) {
-    return NextResponse.json({ error: 'Payer amounts must be positive' }, { status: 400 })
+  if (resolvedPayers.some((p) => p.amount <= 0)) {
+    return NextResponse.json(
+      { error: 'Payer amounts must be positive' },
+      { status: 400 },
+    )
   }
 
   // Verify enteredBy is a valid member of the group
@@ -82,7 +101,10 @@ export async function POST(request: Request) {
       SELECT id FROM members WHERE id = ${enteredBy} AND group_id = ${groupId} LIMIT 1
     `
     if (entererRows.length === 0) {
-      return NextResponse.json({ error: 'Not a member of this group' }, { status: 403 })
+      return NextResponse.json(
+        { error: 'Not a member of this group' },
+        { status: 403 },
+      )
     }
   }
 
@@ -95,7 +117,10 @@ export async function POST(request: Request) {
   const expense = expenseRows[0]
 
   if (!expense) {
-    return NextResponse.json({ error: 'Failed to create expense' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Failed to create expense' },
+      { status: 500 },
+    )
   }
 
   // Insert payers
@@ -106,14 +131,17 @@ export async function POST(request: Request) {
     `
     if (!payerResult) {
       await sql`DELETE FROM expenses WHERE id = ${expense.id}`
-      return NextResponse.json({ error: 'Failed to create payers' }, { status: 500 })
+      return NextResponse.json(
+        { error: 'Failed to create payers' },
+        { status: 500 },
+      )
     }
   }
 
   // Create splits
   let splits: { memberId: string; amount: number }[]
   const memberIds: string[] = hasCustom
-    ? customSplits!.map(s => s.memberId)
+    ? customSplits!.map((s) => s.memberId)
     : splitAmong!
 
   if (hasCustom) {
@@ -126,7 +154,10 @@ export async function POST(request: Request) {
     const balances = await fetchGroupBalances(groupId, memberIds)
     const priorityOrder = sortByDebtPriority(memberIds, balances)
     const cents = computeEqualSplitCents(totalCents, memberIds, priorityOrder)
-    splits = memberIds.map(memberId => ({ memberId, amount: -cents[memberId] / 100 }))
+    splits = memberIds.map((memberId) => ({
+      memberId,
+      amount: -cents[memberId] / 100,
+    }))
   }
 
   for (const s of splits) {
@@ -136,43 +167,34 @@ export async function POST(request: Request) {
     `
     if (!splitResult) {
       await sql`DELETE FROM expenses WHERE id = ${expense.id}`
-      return NextResponse.json({ error: 'Failed to create splits' }, { status: 500 })
+      return NextResponse.json(
+        { error: 'Failed to create splits' },
+        { status: 500 },
+      )
     }
   }
 
-  // Attach receipt, if any. "Everyone in every item" (the seeded default below) reduces
-  // to exactly the equal split already inserted above, so no itemized computation runs here —
-  // only Phase 6's review endpoint (POST /api/receipts/review) needs computeItemizedSplitCents.
+  let receiptId: string | null = null
+  let receiptOcrPending = false
+
+  // Attach the image immediately and let OCR fill items asynchronously after creation.
+  // The expense amount and initial split above stay based on the payer-entered total.
   if (receipt) {
-    const hasItems = Array.isArray(receipt.items) && receipt.items.length > 0
+    receiptOcrPending = receipt.itemize !== false
     const receiptRows = await sql`
-      INSERT INTO receipts (expense_id, image_url, cloudinary_public_id, raw_ocr_json, parsed_total, direction, ocr_status)
-      VALUES (${expense.id}, ${receipt.imageUrl}, ${receipt.cloudinaryPublicId}, ${JSON.stringify(receipt.rawOcrJson ?? null)}, ${receipt.total ?? null}, ${receipt.direction ?? 'ltr'}, ${hasItems ? 'ok' : 'no_items'})
+      INSERT INTO receipts (expense_id, image_url, cloudinary_public_id, ocr_status)
+      VALUES (${expense.id}, ${receipt.imageUrl}, ${receipt.cloudinaryPublicId}, ${receiptOcrPending ? 'pending' : 'no_items'})
       RETURNING id
     `
-    const receiptId = receiptRows[0]?.id
-
-    if (receiptId && hasItems) {
-      for (let i = 0; i < receipt.items.length; i++) {
-        const item = receipt.items[i]
-        const itemRows = await sql`
-          INSERT INTO receipt_items (receipt_id, description, amount, sort_order, y_center_pct)
-          VALUES (${receiptId}, ${item.description}, ${Math.round(item.amount * 100) / 100}, ${i}, ${item.yCenterPct ?? null})
-          RETURNING id
-        `
-        const itemId = itemRows[0]?.id
-        if (!itemId) continue
-        for (const memberId of memberIds) {
-          await sql`INSERT INTO receipt_item_members (item_id, member_id) VALUES (${itemId}, ${memberId})`
-        }
-      }
-      for (const memberId of memberIds) {
-        await sql`INSERT INTO receipt_reviews (receipt_id, member_id) VALUES (${receiptId}, ${memberId})`
-      }
-    }
+    receiptId = receiptRows[0]?.id ?? null
   }
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({
+    ok: true,
+    expenseId: expense.id,
+    receiptId,
+    receiptOcrPending,
+  })
 }
 
 export async function DELETE(request: Request) {
@@ -183,11 +205,15 @@ export async function DELETE(request: Request) {
   }
 
   // Verify admin
-  const adminRows = await sql`SELECT is_admin FROM members WHERE id = ${adminId} LIMIT 1`
+  const adminRows =
+    await sql`SELECT is_admin FROM members WHERE id = ${adminId} LIMIT 1`
   const admin = adminRows[0]
 
   if (!admin?.is_admin) {
-    return NextResponse.json({ error: 'Only admins can delete expenses' }, { status: 403 })
+    return NextResponse.json(
+      { error: 'Only admins can delete expenses' },
+      { status: 403 },
+    )
   }
 
   // Reset all expenses for a group

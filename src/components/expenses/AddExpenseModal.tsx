@@ -6,10 +6,7 @@ import type { Member } from '@/types'
 interface ReceiptPayload {
   imageUrl: string
   cloudinaryPublicId: string
-  rawOcrJson?: unknown
-  total: number | null
-  direction: 'ltr' | 'rtl'
-  items: { description: string; amount: number; yCenterPct: number | null }[]
+  itemize: boolean
 }
 
 interface Props {
@@ -27,21 +24,36 @@ interface Props {
     customSplits?: { memberId: string; amount: number }[]
     payers: { memberId: string; amount: number }[]
     receipt?: ReceiptPayload
-  }) => Promise<void>
+  }) => Promise<void | { receiptId?: string | null }>
   onClose: () => void
 }
 
 const TIP_OPTIONS = [0, 10, 12, 15]
 
 function readSavedTip(): number {
-  try { return parseInt(localStorage.getItem('iou_tip_pct') || '0', 10) || 0 } catch { return 0 }
+  try {
+    return parseInt(localStorage.getItem('iou_tip_pct') || '0', 10) || 0
+  } catch {
+    return 0
+  }
 }
 
-export default function AddExpenseModal({ groupId, members, currentMemberId, isAdmin, currency, memberBalances, onSubmit, onClose }: Props) {
+export default function AddExpenseModal({
+  groupId,
+  members,
+  currentMemberId,
+  isAdmin,
+  currency,
+  memberBalances,
+  onSubmit,
+  onClose,
+}: Props) {
   // Sort by biggest debt first (most negative balance), randomize ties — fixed on open
   const [sortedMembers] = useState<Member[]>(() => {
     const shuffled = [...members].sort(() => Math.random() - 0.5)
-    return shuffled.sort((a, b) => (memberBalances?.[a.id] ?? 0) - (memberBalances?.[b.id] ?? 0))
+    return shuffled.sort(
+      (a, b) => (memberBalances?.[a.id] ?? 0) - (memberBalances?.[b.id] ?? 0),
+    )
   })
 
   const [description, setDescription] = useState('')
@@ -61,13 +73,15 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
   const [error, setError] = useState('')
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Receipt upload / OCR — all optional, additive to the flow above.
+  // Receipt upload only. OCR runs after the expense exists, so the payer-entered bill
+  // remains authoritative and receipt parsing never blocks this form.
   const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null)
-  const [cloudinaryPublicId, setCloudinaryPublicId] = useState<string | null>(null)
-  const [receiptItems, setReceiptItems] = useState<{ description: string; amount: string; yCenterPct: number | null }[]>([])
-  const [receiptDirection, setReceiptDirection] = useState<'ltr' | 'rtl'>('ltr')
-  const [ocrRaw, setOcrRaw] = useState<unknown>(null)
-  const [receiptStatus, setReceiptStatus] = useState<'idle' | 'uploading' | 'scanning' | 'error'>('idle')
+  const [cloudinaryPublicId, setCloudinaryPublicId] = useState<string | null>(
+    null,
+  )
+  const [receiptStatus, setReceiptStatus] = useState<
+    'idle' | 'uploading' | 'error'
+  >('idle')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   function showError(msg: string, durationMs = 2000) {
@@ -88,17 +102,34 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
         canvas.width = Math.round(img.width * scale)
         canvas.height = Math.round(img.height * scale)
         const ctx = canvas.getContext('2d')
-        if (!ctx) { reject(new Error('canvas unavailable')); return }
+        if (!ctx) {
+          reject(new Error('canvas unavailable'))
+          return
+        }
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
         URL.revokeObjectURL(url)
-        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('compression failed')), 'image/jpeg', 0.8)
+        canvas.toBlob(
+          (blob) =>
+            blob ? resolve(blob) : reject(new Error('compression failed')),
+          'image/jpeg',
+          0.8,
+        )
       }
       img.onerror = () => reject(new Error('failed to load image'))
       img.src = url
     })
   }
 
-  function uploadToCloudinary(blob: Blob, params: { signature: string; timestamp: number; folder: string; apiKey: string; cloudName: string }): Promise<{ secure_url: string; public_id: string }> {
+  function uploadToCloudinary(
+    blob: Blob,
+    params: {
+      signature: string
+      timestamp: number
+      folder: string
+      apiKey: string
+      cloudName: string
+    },
+  ): Promise<{ secure_url: string; public_id: string }> {
     return new Promise((resolve, reject) => {
       const form = new FormData()
       form.append('file', blob)
@@ -107,9 +138,13 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
       form.append('signature', params.signature)
       form.append('folder', params.folder)
       const xhr = new XMLHttpRequest()
-      xhr.open('POST', `https://api.cloudinary.com/v1_1/${params.cloudName}/image/upload`)
+      xhr.open(
+        'POST',
+        `https://api.cloudinary.com/v1_1/${params.cloudName}/image/upload`,
+      )
       xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText))
+        if (xhr.status >= 200 && xhr.status < 300)
+          resolve(JSON.parse(xhr.responseText))
         else reject(new Error('Cloudinary upload failed'))
       }
       xhr.onerror = () => reject(new Error('Cloudinary upload failed'))
@@ -137,58 +172,29 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
 
       setReceiptImageUrl(uploaded.secure_url)
       setCloudinaryPublicId(uploaded.public_id)
-      setReceiptStatus('scanning')
-
-      stage = 'scanning receipt'
-      const ocrRes = await fetch('/api/receipts/ocr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupId, memberId: currentMemberId, imageUrl: uploaded.secure_url }),
-      })
-      if (!ocrRes.ok) {
-        // The OCR route already returns a complete, user-facing sentence — show it as-is
-        // rather than wrapping it in the generic "Failed at <stage>" debug format below.
-        const errData = await ocrRes.json().catch(() => ({}))
-        setReceiptStatus('error')
-        showError(errData.error || 'Could not scan receipt — try again, or add items manually.', 8000)
-        return
-      }
-      const ocrData: { items: { description: string; amount: number; yCenterPct: number | null }[]; total: number | null; direction: 'ltr' | 'rtl'; raw: unknown } = await ocrRes.json()
-
-      setReceiptItems(ocrData.items.map(it => ({ description: it.description, amount: String(it.amount), yCenterPct: it.yCenterPct })))
-      setReceiptDirection(ocrData.direction)
-      setOcrRaw(ocrData.raw)
-      if (ocrData.total && !amount) handleBillChange(String(ocrData.total))
       setReceiptStatus('idle')
     } catch (err) {
       setReceiptStatus('error')
-      showError(`Failed at ${stage}: ${err instanceof Error ? err.message : String(err)}`, 8000)
+      showError(
+        `Failed at ${stage}: ${err instanceof Error ? err.message : String(err)}`,
+        8000,
+      )
     }
-  }
-
-  function updateReceiptItem(idx: number, field: 'description' | 'amount', value: string) {
-    setReceiptItems(prev => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)))
-  }
-
-  function removeReceiptItem(idx: number) {
-    setReceiptItems(prev => prev.filter((_, i) => i !== idx))
-  }
-
-  function addReceiptItem() {
-    // yCenterPct is null (unknown position) for manually-added rows — ReviewReceiptModal
-    // falls back to the plain full-image layout whenever any item lacks a position.
-    setReceiptItems(prev => [...prev, { description: `Row ${prev.length + 1}`, amount: '', yCenterPct: null }])
   }
 
   function toggleExclude(memberId: string) {
     const next = new Set(excluded)
-    if (next.has(memberId)) next.delete(memberId); else next.add(memberId)
+    if (next.has(memberId)) next.delete(memberId)
+    else next.add(memberId)
     setExcluded(next)
 
     const billRef = parseFloat(amount) || 0
     if (billRef > 0 && !isManualSplit) {
-      const active = sortedMembers.filter(m => !next.has(m.id))
-      const share = active.length > 0 ? Math.round(billRef / active.length * 10000) / 10000 : 0
+      const active = sortedMembers.filter((m) => !next.has(m.id))
+      const share =
+        active.length > 0
+          ? Math.round((billRef / active.length) * 10000) / 10000
+          : 0
       const newAmounts: Record<string, string> = {}
       for (const m of sortedMembers)
         newAmounts[m.id] = next.has(m.id) ? '' : String(share)
@@ -196,10 +202,10 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
       setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
     }
     if (next.has(memberId)) {
-      setPaidAmounts(prev => ({ ...prev, [memberId]: '' }))
+      setPaidAmounts((prev) => ({ ...prev, [memberId]: '' }))
       if (isManualSplit) {
-        setCustomAmounts(prev => ({ ...prev, [memberId]: '' }))
-        setTipIncAmounts(prev => ({ ...prev, [memberId]: '' }))
+        setCustomAmounts((prev) => ({ ...prev, [memberId]: '' }))
+        setTipIncAmounts((prev) => ({ ...prev, [memberId]: '' }))
       }
     }
   }
@@ -230,9 +236,13 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
   // Tip inc. — exact proportional share of the grand total per member.
   // Stored to 4 decimal places so balances accumulate without systematic bias.
   // Display separately rounds to integer.
-  function computeTipInc(ordered: Record<string, string>, pct: number, ru: boolean): Record<string, string> {
+  function computeTipInc(
+    ordered: Record<string, string>,
+    pct: number,
+    ru: boolean,
+  ): Record<string, string> {
     const ids = Object.keys(ordered)
-    const amounts = ids.map(id => parseFloat(ordered[id]) || 0)
+    const amounts = ids.map((id) => parseFloat(ordered[id]) || 0)
     const totalOrdered = amounts.reduce((s, v) => s + v, 0)
     const tipInc: Record<string, string> = {}
     for (const id of ids) tipInc[id] = ''
@@ -245,7 +255,8 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
     for (let i = 0; i < ids.length; i++) {
       if (amounts[i] <= 0) continue
       // Store exact share to 4 decimal places — no integer rounding here
-      const exact = Math.round(amounts[i] / totalOrdered * grandTotal * 10000) / 10000
+      const exact =
+        Math.round((amounts[i] / totalOrdered) * grandTotal * 10000) / 10000
       tipInc[ids[i]] = String(exact)
     }
     return tipInc
@@ -253,11 +264,17 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
 
   function handleTipChange(pct: number) {
     setTipPct(pct)
-    try { localStorage.setItem('iou_tip_pct', String(pct)) } catch {}
+    try {
+      localStorage.setItem('iou_tip_pct', String(pct))
+    } catch {}
     setTipIncAmounts(computeTipInc(customAmounts, pct, roundUp))
   }
 
-  function handleOrderedChange(pivotIdx: number, pivotMemberId: string, rawValue: string) {
+  function handleOrderedChange(
+    pivotIdx: number,
+    pivotMemberId: string,
+    rawValue: string,
+  ) {
     if (!isManualSplit) {
       // First manual edit: clear all others, enter manual mode
       setIsManualSplit(true)
@@ -289,10 +306,14 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
     setIsManualSplit(false)
     const billRef = parseFloat(value) || 0
     if (billRef > 0) {
-      const active = sortedMembers.filter(m => !excluded.has(m.id))
-      const share = active.length > 0 ? Math.round(billRef / active.length * 10000) / 10000 : 0
+      const active = sortedMembers.filter((m) => !excluded.has(m.id))
+      const share =
+        active.length > 0
+          ? Math.round((billRef / active.length) * 10000) / 10000
+          : 0
       const newAmounts: Record<string, string> = {}
-      for (const m of sortedMembers) newAmounts[m.id] = excluded.has(m.id) ? '' : String(share)
+      for (const m of sortedMembers)
+        newAmounts[m.id] = excluded.has(m.id) ? '' : String(share)
       setCustomAmounts(newAmounts)
       setTipIncAmounts(computeTipInc(newAmounts, tipPct, roundUp))
     } else {
@@ -303,72 +324,96 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
 
   // --- Totals ---
   const billVal = parseFloat(amount) || 0
-  const subtotal = Object.values(customAmounts).reduce((s, v) => s + (parseFloat(v) || 0), 0)
+  const subtotal = Object.values(customAmounts).reduce(
+    (s, v) => s + (parseFloat(v) || 0),
+    0,
+  )
   // Base the grand total on the bill (stable), not the running ordered sum
-  const finalTotal = billVal > 0
-    ? (() => { const cents = Math.round(billVal * (1 + tipPct / 100) * 100) / 100; return roundUp ? Math.ceil(cents) : Math.round(cents) })()
-    : Object.values(tipIncAmounts).reduce((s, v) => s + (parseFloat(v) || 0), 0)
+  const finalTotal =
+    billVal > 0
+      ? (() => {
+          const cents = Math.round(billVal * (1 + tipPct / 100) * 100) / 100
+          return roundUp ? Math.ceil(cents) : Math.round(cents)
+        })()
+      : Object.values(tipIncAmounts).reduce(
+          (s, v) => s + (parseFloat(v) || 0),
+          0,
+        )
   const tipAmount = finalTotal - subtotal
 
   // --- Split (uses tipIncAmounts as the authoritative per-person totals) ---
   const computedCustomSplits = sortedMembers
-    .filter(m => (parseFloat(tipIncAmounts[m.id]) || 0) > 0)
-    .map(m => ({ memberId: m.id, amount: parseFloat(tipIncAmounts[m.id]) || 0 }))
+    .filter((m) => (parseFloat(tipIncAmounts[m.id]) || 0) > 0)
+    .map((m) => ({
+      memberId: m.id,
+      amount: parseFloat(tipIncAmounts[m.id]) || 0,
+    }))
 
   // --- Ordered unassigned (vs bill) ---
-  const orderedUnassigned = billVal > 0 ? Math.round((billVal - subtotal) * 100) / 100 : 0
+  const orderedUnassigned =
+    billVal > 0 ? Math.round((billVal - subtotal) * 100) / 100 : 0
 
   // --- Paid ---
-  const totalPaid = sortedMembers.reduce((s, m) => s + (parseFloat(paidAmounts[m.id]) || 0), 0)
+  const totalPaid = sortedMembers.reduce(
+    (s, m) => s + (parseFloat(paidAmounts[m.id]) || 0),
+    0,
+  )
   const unassigned = Math.round((finalTotal - totalPaid) * 100) / 100
 
   const payers = sortedMembers
-    .filter(m => (parseFloat(paidAmounts[m.id]) || 0) > 0)
-    .map(m => ({ memberId: m.id, amount: Math.round(parseFloat(paidAmounts[m.id]) * 100) / 100 }))
+    .filter((m) => (parseFloat(paidAmounts[m.id]) || 0) > 0)
+    .map((m) => ({
+      memberId: m.id,
+      amount: Math.round(parseFloat(paidAmounts[m.id]) * 100) / 100,
+    }))
 
   const paidBy = payers[0]?.memberId ?? currentMemberId
 
-  // --- Receipt items vs bill ---
-  const itemsTotal = receiptItems.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0)
-  const itemsOvershoot = receiptItems.length > 0 && billVal > 0 ? Math.round((itemsTotal - billVal) * 100) / 100 : 0
-
   async function handleSubmit() {
-    if (!description.trim()) { showError('Enter a description'); return }
-    if (computedCustomSplits.length === 0) { showError('Enter at least one ordered amount'); return }
-    if (billVal > 0 && orderedUnassigned !== 0) {
-      showError(orderedUnassigned > 0
-        ? `${currency}${orderedUnassigned} missing`
-        : `${currency}${-orderedUnassigned} over`)
+    if (!description.trim()) {
+      showError('Enter a description')
       return
     }
-    if (itemsOvershoot > 0) { showError(`Items exceed bill by ${currency}${itemsOvershoot}`); return }
-    if (payers.length === 0) { showError('Enter who paid'); return }
+    if (computedCustomSplits.length === 0) {
+      showError('Enter at least one ordered amount')
+      return
+    }
+    if (billVal > 0 && orderedUnassigned !== 0) {
+      showError(
+        orderedUnassigned > 0
+          ? `${currency}${orderedUnassigned} missing`
+          : `${currency}${-orderedUnassigned} over`,
+      )
+      return
+    }
+    if (payers.length === 0) {
+      showError('Enter who paid')
+      return
+    }
     if (unassigned !== 0) {
-      showError(unassigned > 0
-        ? `${currency}${unassigned} missing`
-        : `${currency}${-unassigned} over`)
+      showError(
+        unassigned > 0
+          ? `${currency}${unassigned} missing`
+          : `${currency}${-unassigned} over`,
+      )
       return
     }
     setSubmitting(true)
     setError('')
     try {
-      const validReceiptItems = receiptItems.filter(it => (parseFloat(it.amount) || 0) > 0)
-      const receipt: ReceiptPayload | undefined = receiptImageUrl && cloudinaryPublicId
-        ? {
-            imageUrl: receiptImageUrl,
-            cloudinaryPublicId,
-            rawOcrJson: ocrRaw,
-            total: billVal > 0 ? billVal : null,
-            direction: receiptDirection,
-            // Manual split overrides and itemized-consumption review are mutually exclusive
-            items: isManualSplit ? [] : validReceiptItems.map(it => ({ description: it.description, amount: parseFloat(it.amount), yCenterPct: it.yCenterPct })),
-          }
-        : undefined
+      const receipt: ReceiptPayload | undefined =
+        receiptImageUrl && cloudinaryPublicId
+          ? {
+              imageUrl: receiptImageUrl,
+              cloudinaryPublicId,
+              itemize: !isManualSplit,
+            }
+          : undefined
       await onSubmit({
         paidBy,
         amount: finalTotal,
         description: description.trim(),
-        splitAmong: computedCustomSplits.map(s => s.memberId),
+        splitAmong: computedCustomSplits.map((s) => s.memberId),
         customSplits: computedCustomSplits,
         payers,
         receipt,
@@ -383,31 +428,41 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center">
       <div className="bg-white rounded-t-2xl w-full max-w-sm max-h-[90dvh] overflow-y-auto p-5 space-y-4">
-
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">Add expense</h2>
-          <button onClick={onClose} className="text-ink-muted text-xl leading-none">&times;</button>
+          <button
+            onClick={onClose}
+            className="text-ink-muted text-xl leading-none"
+          >
+            &times;
+          </button>
         </div>
 
         {/* Description */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-medium text-ink-soft">Description</label>
+            <label className="text-xs font-medium text-ink-soft">
+              Description
+            </label>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={receiptStatus === 'uploading' || receiptStatus === 'scanning'}
+              disabled={receiptStatus === 'uploading'}
               className="text-xs text-accent font-medium disabled:opacity-50"
             >
-              {receiptStatus === 'uploading' ? 'Uploading…' : receiptStatus === 'scanning' ? 'Scanning…' : receiptImageUrl ? 'Re-upload' : 'Upload receipt'}
+              {receiptStatus === 'uploading'
+                ? 'Uploading...'
+                : receiptImageUrl
+                  ? 'Re-upload'
+                  : 'Upload receipt'}
             </button>
             <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={e => {
+              onChange={(e) => {
                 const file = e.target.files?.[0]
                 if (file) handleReceiptFile(file)
                 e.target.value = ''
@@ -418,7 +473,7 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
             className="input"
             placeholder="What was it for?"
             value={description}
-            onChange={e => setDescription(e.target.value)}
+            onChange={(e) => setDescription(e.target.value)}
             onFocus={selectAll}
             autoFocus
           />
@@ -426,54 +481,34 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
 
         {receiptImageUrl && (
           <div className="space-y-2">
-            <p className="text-xs text-ink-muted">
-              Editing rows here changes the receipt for everyone. Each person opts out of items they didn&apos;t have after you submit.
-            </p>
             <div className="flex gap-3 items-start">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={receiptImageUrl} alt="Receipt" className="w-16 h-16 object-cover rounded-lg border border-border shrink-0" />
-              <div className="flex-1 space-y-1.5 min-w-0">
-                {receiptItems.map((it, idx) => (
-                  <div key={idx} className="flex gap-1.5 items-center">
-                    <input
-                      className="input py-1 text-xs flex-1 min-w-0"
-                      value={it.description}
-                      onChange={e => updateReceiptItem(idx, 'description', e.target.value)}
-                      onFocus={selectAll}
-                    />
-                    <div className="relative w-16 shrink-0">
-                      <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-ink-muted text-[10px]">{currency}</span>
-                      <input
-                        className="input py-1 text-xs w-full pl-4 pr-1"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={it.amount}
-                        onChange={e => updateReceiptItem(idx, 'amount', e.target.value)}
-                        onFocus={selectAll}
-                      />
-                    </div>
-                    <button type="button" onClick={() => removeReceiptItem(idx)} className="text-ink-muted text-xs px-1">&times;</button>
-                  </div>
-                ))}
-                <button type="button" onClick={addReceiptItem} className="text-xs text-accent font-medium">+ Add row</button>
+              <img
+                src={receiptImageUrl}
+                alt="Receipt"
+                className="w-16 h-16 object-cover rounded-lg border border-border shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-ink">Receipt attached</p>
+                <p className="text-xs text-ink-muted">
+                  Items will be extracted after you submit. Participants can
+                  review the image and item list later.
+                </p>
               </div>
             </div>
-            {receiptItems.length > 0 && billVal > 0 && (
-              <p className="text-xs text-ink-muted text-right">
-                Items {currency}{Math.round(itemsTotal * 100) / 100}
-                {itemsOvershoot > 0 && <span className="text-red"> — {currency}{itemsOvershoot} over bill</span>}
-              </p>
-            )}
           </div>
         )}
 
         {/* Bill | Tip | Total+Roundup */}
         <div className="flex gap-2 items-end">
           <div className="flex-1">
-            <label className="text-xs font-medium text-ink-soft block mb-2">Bill</label>
+            <label className="text-xs font-medium text-ink-soft block mb-2">
+              Bill
+            </label>
             <div className="relative">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">{currency}</span>
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">
+                {currency}
+              </span>
               <input
                 className="input pl-5 pr-1"
                 type="number"
@@ -482,19 +517,23 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
                 placeholder="0"
                 value={amount}
                 onFocus={selectAll}
-                onChange={e => handleBillChange(e.target.value)}
+                onChange={(e) => handleBillChange(e.target.value)}
               />
             </div>
           </div>
           <div className="w-[22%]">
-            <label className="text-xs font-medium text-ink-soft block mb-2">Tip</label>
+            <label className="text-xs font-medium text-ink-soft block mb-2">
+              Tip
+            </label>
             <select
               className="input px-2"
               value={tipPct}
-              onChange={e => handleTipChange(Number(e.target.value))}
+              onChange={(e) => handleTipChange(Number(e.target.value))}
             >
-              {TIP_OPTIONS.map(pct => (
-                <option key={pct} value={pct}>{pct}%</option>
+              {TIP_OPTIONS.map((pct) => (
+                <option key={pct} value={pct}>
+                  {pct}%
+                </option>
               ))}
             </select>
           </div>
@@ -510,10 +549,14 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
                 }}
                 title={roundUp ? 'Round up on' : 'Round up off'}
                 className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                  roundUp ? 'bg-accent border-accent' : 'border-ink-muted bg-white'
+                  roundUp
+                    ? 'bg-accent border-accent'
+                    : 'border-ink-muted bg-white'
                 }`}
               >
-                {roundUp && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
+                {roundUp && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-white block" />
+                )}
               </button>
             </div>
             <input
@@ -530,17 +573,29 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
         <div>
           <div className="flex items-center gap-1.5 mb-2">
             <span className="flex-1" />
-            <span className="w-20 shrink-0 text-xs font-medium text-ink-soft text-center">Ordered</span>
-            <span className="w-14 shrink-0 text-xs font-medium text-ink-soft text-center">To pay</span>
-            <span className="w-20 shrink-0 text-xs font-medium text-ink-soft text-center">Paid</span>
+            <span className="w-20 shrink-0 text-xs font-medium text-ink-soft text-center">
+              Ordered
+            </span>
+            <span className="w-14 shrink-0 text-xs font-medium text-ink-soft text-center">
+              To pay
+            </span>
+            <span className="w-20 shrink-0 text-xs font-medium text-ink-soft text-center">
+              Paid
+            </span>
           </div>
 
           <div className="space-y-2">
             {sortedMembers.map((m, memberIdx) => {
               const label = m.name + (m.id === currentMemberId ? ' (you)' : '')
-              function openCalc() { setCalcOpen(m.id); setCalcExpr('') }
+              function openCalc() {
+                setCalcOpen(m.id)
+                setCalcExpr('')
+              }
               return (
-                <div key={m.id} className={`flex items-center gap-1.5 transition-opacity ${excluded.has(m.id) ? 'opacity-40' : ''}`}>
+                <div
+                  key={m.id}
+                  className={`flex items-center gap-1.5 transition-opacity ${excluded.has(m.id) ? 'opacity-40' : ''}`}
+                >
                   <span
                     onClick={() => toggleExclude(m.id)}
                     className={`text-xs flex-1 truncate min-w-0 cursor-pointer select-none transition-opacity
@@ -555,11 +610,17 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
                     const rounded2 = Math.round(raw * 100) / 100
                     const isFocused = focusedOrderedId === m.id
                     const isApprox = raw > 0 && Math.abs(raw - rounded2) > 1e-9
-                    const displayVal = isFocused ? (customAmounts[m.id] ?? '') : (raw > 0 ? String(rounded2) : '')
+                    const displayVal = isFocused
+                      ? (customAmounts[m.id] ?? '')
+                      : raw > 0
+                        ? String(rounded2)
+                        : ''
                     return (
                       <div className="relative w-20 shrink-0">
                         {isApprox && !isFocused && (
-                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs leading-none select-none pointer-events-none">…</span>
+                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs leading-none select-none pointer-events-none">
+                            …
+                          </span>
                         )}
                         <input
                           className={`input no-spinner py-1.5 text-sm text-right w-full pl-3 ${isApprox && !isFocused ? 'pr-4' : 'pr-2'} ${!billVal || excluded.has(m.id) ? 'opacity-40 pointer-events-none' : ''}`}
@@ -569,13 +630,29 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
                           placeholder="0"
                           disabled={!billVal || excluded.has(m.id)}
                           value={displayVal}
-                          onFocus={e => { setFocusedOrderedId(m.id); selectAll(e) }}
-                          onChange={e => handleOrderedChange(memberIdx, m.id, e.target.value)}
-                          onBlur={() => { setFocusedOrderedId(null); handleOrderedBlur(m.id) }}
+                          onFocus={(e) => {
+                            setFocusedOrderedId(m.id)
+                            selectAll(e)
+                          }}
+                          onChange={(e) =>
+                            handleOrderedChange(memberIdx, m.id, e.target.value)
+                          }
+                          onBlur={() => {
+                            setFocusedOrderedId(null)
+                            handleOrderedBlur(m.id)
+                          }}
                           onDoubleClick={openCalc}
-                          onPointerDown={() => { longPressTimer.current = setTimeout(openCalc, 500) }}
-                          onPointerUp={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
-                          onPointerCancel={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
+                          onPointerDown={() => {
+                            longPressTimer.current = setTimeout(openCalc, 500)
+                          }}
+                          onPointerUp={() => {
+                            if (longPressTimer.current)
+                              clearTimeout(longPressTimer.current)
+                          }}
+                          onPointerCancel={() => {
+                            if (longPressTimer.current)
+                              clearTimeout(longPressTimer.current)
+                          }}
                         />
                       </div>
                     )
@@ -589,7 +666,11 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
                     return (
                       <div className="w-14 shrink-0 text-center">
                         <span className="text-[10px] text-ink-muted">
-                          {raw > 0 ? (isApprox ? `${currency}${rounded2}…` : `${currency}${rounded2}`) : ''}
+                          {raw > 0
+                            ? isApprox
+                              ? `${currency}${rounded2}…`
+                              : `${currency}${rounded2}`
+                            : ''}
                         </span>
                       </div>
                     )
@@ -605,14 +686,27 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
                       placeholder="0"
                       disabled={excluded.has(m.id)}
                       value={paidAmounts[m.id] ?? ''}
-                      onFocus={e => {
-                        if (unassigned > 0) setPaidAmounts(prev => ({ ...prev, [m.id]: String(Math.ceil(unassigned)) }))
+                      onFocus={(e) => {
+                        if (unassigned > 0)
+                          setPaidAmounts((prev) => ({
+                            ...prev,
+                            [m.id]: String(Math.ceil(unassigned)),
+                          }))
                         selectAll(e)
                       }}
-                      onChange={e => setPaidAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
-                      onBlur={e => {
+                      onChange={(e) =>
+                        setPaidAmounts((prev) => ({
+                          ...prev,
+                          [m.id]: e.target.value,
+                        }))
+                      }
+                      onBlur={(e) => {
                         const val = parseFloat(e.target.value)
-                        if (val > 0) setPaidAmounts(prev => ({ ...prev, [m.id]: String(Math.ceil(val)) }))
+                        if (val > 0)
+                          setPaidAmounts((prev) => ({
+                            ...prev,
+                            [m.id]: String(Math.ceil(val)),
+                          }))
                       }}
                     />
                   </div>
@@ -625,11 +719,19 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
           {(orderedUnassigned !== 0 || unassigned !== 0) && (
             <div className="flex justify-end mt-1 gap-1.5">
               <span className="w-20 shrink-0 text-xs text-center text-ink-muted">
-                {orderedUnassigned !== 0 ? (orderedUnassigned > 0 ? `${currency}${orderedUnassigned} missing` : `${currency}${-orderedUnassigned} over`) : ''}
+                {orderedUnassigned !== 0
+                  ? orderedUnassigned > 0
+                    ? `${currency}${orderedUnassigned} missing`
+                    : `${currency}${-orderedUnassigned} over`
+                  : ''}
               </span>
               <span className="w-14 shrink-0" />
               <span className="w-20 shrink-0 text-xs text-center text-ink-muted">
-                {unassigned !== 0 && finalTotal > 0 ? (unassigned > 0 ? `${currency}${unassigned} missing` : `${currency}${-unassigned} over`) : ''}
+                {unassigned !== 0 && finalTotal > 0
+                  ? unassigned > 0
+                    ? `${currency}${unassigned} missing`
+                    : `${currency}${-unassigned} over`
+                  : ''}
               </span>
             </div>
           )}
@@ -638,46 +740,74 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
         {error && <p className="text-red text-sm">{error}</p>}
 
         {/* Calculator modal */}
-        {calcOpen && (() => {
-          const calcSum = parseSum(calcExpr)
-          const calcMemberIdx = members.findIndex(m => m.id === calcOpen)
-          const memberName = members[calcMemberIdx]?.name ?? ''
-          function applyCalc() {
-            if (calcSum > 0) handleOrderedChange(calcMemberIdx, calcOpen!, String(calcSum))
-            setCalcOpen(null); setCalcExpr('')
-          }
-          return (
-            <div
-              className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
-              onClick={() => { setCalcOpen(null); setCalcExpr('') }}
-            >
-              <div className="bg-white rounded-2xl p-5 w-72 shadow-xl space-y-4" onClick={e => e.stopPropagation()}>
-                <p className="text-sm font-semibold">{memberName} — Ordered</p>
-                <input
-                  className="input text-center text-base"
-                  type="text"
-                  placeholder="15 + 8 + 12"
-                  value={calcExpr}
-                  autoFocus
-                  onChange={e => setCalcExpr(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') applyCalc()
-                    if (e.key === 'Escape') { setCalcOpen(null); setCalcExpr('') }
-                  }}
-                />
-                {calcExpr && (
-                  <p className="text-center text-2xl font-bold text-accent">
-                    {calcSum > 0 ? `${currency}${fmt(calcSum)}` : '—'}
+        {calcOpen &&
+          (() => {
+            const calcSum = parseSum(calcExpr)
+            const calcMemberIdx = members.findIndex((m) => m.id === calcOpen)
+            const memberName = members[calcMemberIdx]?.name ?? ''
+            function applyCalc() {
+              if (calcSum > 0)
+                handleOrderedChange(calcMemberIdx, calcOpen!, String(calcSum))
+              setCalcOpen(null)
+              setCalcExpr('')
+            }
+            return (
+              <div
+                className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
+                onClick={() => {
+                  setCalcOpen(null)
+                  setCalcExpr('')
+                }}
+              >
+                <div
+                  className="bg-white rounded-2xl p-5 w-72 shadow-xl space-y-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <p className="text-sm font-semibold">
+                    {memberName} — Ordered
                   </p>
-                )}
-                <div className="flex gap-2">
-                  <button className="btn btn-outline btn-sm flex-1" onClick={() => { setCalcOpen(null); setCalcExpr('') }}>Cancel</button>
-                  <button className="btn btn-primary btn-sm flex-1" disabled={calcSum <= 0} onClick={applyCalc}>Use {calcSum > 0 ? fmt(calcSum) : ''}</button>
+                  <input
+                    className="input text-center text-base"
+                    type="text"
+                    placeholder="15 + 8 + 12"
+                    value={calcExpr}
+                    autoFocus
+                    onChange={(e) => setCalcExpr(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') applyCalc()
+                      if (e.key === 'Escape') {
+                        setCalcOpen(null)
+                        setCalcExpr('')
+                      }
+                    }}
+                  />
+                  {calcExpr && (
+                    <p className="text-center text-2xl font-bold text-accent">
+                      {calcSum > 0 ? `${currency}${fmt(calcSum)}` : '—'}
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      className="btn btn-outline btn-sm flex-1"
+                      onClick={() => {
+                        setCalcOpen(null)
+                        setCalcExpr('')
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="btn btn-primary btn-sm flex-1"
+                      disabled={calcSum <= 0}
+                      onClick={applyCalc}
+                    >
+                      Use {calcSum > 0 ? fmt(calcSum) : ''}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )
-        })()}
+            )
+          })()}
 
         <button
           onClick={handleSubmit}
@@ -685,7 +815,9 @@ export default function AddExpenseModal({ groupId, members, currentMemberId, isA
           className={`btn ${
             payers.length > 0 && unassigned !== 0
               ? 'btn-danger'
-              : description.trim() && computedCustomSplits.length > 0 && payers.length > 0
+              : description.trim() &&
+                  computedCustomSplits.length > 0 &&
+                  payers.length > 0
                 ? 'btn-success'
                 : 'btn-primary'
           }`}

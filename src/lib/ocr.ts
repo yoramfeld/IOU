@@ -3,16 +3,19 @@
 
 const GEMINI_MODEL = 'gemini-2.5-flash'
 
-const DESCRIPTION_MAX_CHARS = 15
+const DESCRIPTION_MAX_CHARS = 80
 
 export interface ExtractedRow {
   description: string
   amount: number
-  yCenterPct: number | null // 0-100, vertical center of this row on the receipt image; null if ungrounded
 }
 
 export interface ExtractedReceipt {
+  merchantName: string | null
   rows: ExtractedRow[]
+  subtotal: number | null
+  tax: number | null
+  tip: number | null
   total: number | null
   direction: 'ltr' | 'rtl'
   raw: unknown
@@ -28,54 +31,74 @@ export class OcrRateLimitError extends Error {
   }
 }
 
-// Only the vertical position is used (checkbox alignment) — horizontal bounding-box
-// accuracy isn't needed, so we accept Gemini's native box_2d grounding format but only
-// ever read ymin/ymax out of it.
+// Keep the provider output focused on semantic bill data. The review UI shows extracted
+// rows as a list alongside the original image, so no visual row grounding is required.
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
+    merchantName: {
+      type: 'STRING',
+      description:
+        'Merchant or restaurant name exactly as printed, or empty string if unclear.',
+    },
     direction: {
       type: 'STRING',
       enum: ['ltr', 'rtl'],
-      description: 'Primary reading direction of the receipt text — "rtl" for Hebrew, Arabic, etc.',
+      description:
+        'Primary reading direction of the receipt text — "rtl" for Hebrew, Arabic, etc.',
     },
     rows: {
       type: 'ARRAY',
       items: {
         type: 'OBJECT',
         properties: {
-          description: { type: 'STRING', description: 'Short item name/description as printed, no quantity or unit price.' },
-          amount: { type: 'NUMBER', description: 'Pre-tax cost of this line item.' },
-          box_2d: {
-            type: 'ARRAY',
-            items: { type: 'INTEGER' },
-            description: 'Bounding box around this line, as [ymin, xmin, ymax, xmax] normalized 0-1000.',
+          description: {
+            type: 'STRING',
+            description:
+              'Item name/description as printed, without quantity or unit price when separable.',
+          },
+          amount: {
+            type: 'NUMBER',
+            description:
+              'Line item total cost. Use the row total, not unit price.',
           },
         },
-        required: ['description', 'amount', 'box_2d'],
+        required: ['description', 'amount'],
       },
-      description: 'Line items in the order they are printed, top to bottom.',
+      description:
+        'Purchasable line items in printed order. Exclude taxes, tips, service charges, discounts, and total rows.',
+    },
+    subtotal: {
+      type: 'NUMBER',
+      description: 'Printed subtotal before tax/tip/service when visible.',
+    },
+    tax: { type: 'NUMBER', description: 'Printed tax amount when visible.' },
+    tip: {
+      type: 'NUMBER',
+      description: 'Printed tip/service amount when visible.',
     },
     total: {
       type: 'NUMBER',
-      description: 'The printed grand total (or subtotal if no grand total is visible).',
+      description: 'Printed grand total when visible.',
     },
   },
-  required: ['rows', 'total', 'direction'],
+  required: ['merchantName', 'rows', 'direction'],
 }
 
-const PROMPT = `Analyze this receipt image.
+const PROMPT = `Analyze this receipt image and extract structured bill data for later human review.
 1. Determine the primary reading direction ("ltr" or "rtl" — Hebrew/Arabic receipts are "rtl").
-2. For each pre-tax line item (in printed order, top to bottom), extract:
-   - "description": a short item name as printed (just the name — ignore quantity and unit price, we only need the name and the line's total cost).
-   - "amount": the line's total pre-tax cost.
-   - "box_2d": a bounding box as [ymin, xmin, ymax, xmax] normalized 0-1000. The box must tightly bound ONLY the visible text glyphs of that specific line (top of its tallest character to the bottom/baseline of its lowest character) — do not include surrounding whitespace, line spacing, or any part of adjacent lines. Line items are typically only 15-25 units tall in this normalized scale; be precise about the exact vertical extent of the glyphs themselves. Locate each box independently by finding that specific line's actual text — do NOT assume items are evenly spaced or interpolate a uniform grid across the item list, since receipts often have irregular spacing or dashed/dotted separator lines between rows. A separator line is never part of an item's text; never anchor a box to one.
-   Do not include tax, tip, service charge, or the total line as a row.
-3. Read the printed grand total (or subtotal if no total is visible) into "total".
-On a right-to-left receipt, amounts are typically printed in the left column rather than the right — identify amounts by numeric/currency formatting, not by assuming a side.
+2. Extract the merchant or restaurant name if visible.
+3. Extract each purchasable line item in printed order:
+   - "description": item name as printed. Keep it readable; remove quantity/unit-price fragments only when clearly separate.
+   - "amount": that line's total cost. If quantity times unit price is printed, use the row total.
+   Do not include tax, tip, service charge, discount, subtotal, or total lines as rows.
+4. Extract printed subtotal, tax, tip/service, and grand total when visible. Leave uncertain numeric fields absent.
+On a right-to-left receipt, amounts are often printed in the left column; identify amounts by numeric/currency formatting, not by assuming a side.
 Respond with JSON only.`
 
-export async function extractReceiptRows(imageUrl: string): Promise<ExtractedReceipt> {
+export async function extractReceiptRows(
+  imageUrl: string,
+): Promise<ExtractedReceipt> {
   const apiKey = process.env.GEMINI_API_KEY!
 
   const imageResponse = await fetch(imageUrl)
@@ -122,29 +145,50 @@ export async function extractReceiptRows(imageUrl: string): Promise<ExtractedRec
   }
 
   const parsed = JSON.parse(rawText) as {
+    merchantName?: unknown
     rows?: unknown
+    subtotal?: unknown
+    tax?: unknown
+    tip?: unknown
     total?: unknown
     direction?: unknown
   }
 
   const rawRows = Array.isArray(parsed.rows) ? parsed.rows : []
   const rows: ExtractedRow[] = rawRows
-    .filter((r): r is { description: unknown; amount: unknown; box_2d: unknown } => typeof r === 'object' && r !== null)
+    .filter(
+      (r): r is { description: unknown; amount: unknown } =>
+        typeof r === 'object' && r !== null,
+    )
     .map((r, i) => {
-      const amount = typeof r.amount === 'number' && r.amount >= 0 ? r.amount : null
-      const description = typeof r.description === 'string' && r.description.trim()
-        ? r.description.trim().slice(0, DESCRIPTION_MAX_CHARS)
-        : `Row ${i + 1}`
-      const box = Array.isArray(r.box_2d) && r.box_2d.length === 4 && r.box_2d.every(n => typeof n === 'number')
-        ? (r.box_2d as number[])
-        : null
-      const yCenterPct = box ? ((box[0] + box[2]) / 2 / 1000) * 100 : null
-      return amount !== null ? { description, amount, yCenterPct } : null
+      const amount =
+        typeof r.amount === 'number' && r.amount >= 0 ? r.amount : null
+      const description =
+        typeof r.description === 'string' && r.description.trim()
+          ? r.description.trim().slice(0, DESCRIPTION_MAX_CHARS)
+          : `Item ${i + 1}`
+      return amount !== null ? { description, amount } : null
     })
     .filter((r): r is ExtractedRow => r !== null)
 
+  const merchantName =
+    typeof parsed.merchantName === 'string' && parsed.merchantName.trim()
+      ? parsed.merchantName.trim().slice(0, 120)
+      : null
+  const subtotal = typeof parsed.subtotal === 'number' ? parsed.subtotal : null
+  const tax = typeof parsed.tax === 'number' ? parsed.tax : null
+  const tip = typeof parsed.tip === 'number' ? parsed.tip : null
   const total = typeof parsed.total === 'number' ? parsed.total : null
   const direction: 'ltr' | 'rtl' = parsed.direction === 'rtl' ? 'rtl' : 'ltr'
 
-  return { rows, total, direction, raw: result }
+  return {
+    merchantName,
+    rows,
+    subtotal,
+    tax,
+    tip,
+    total,
+    direction,
+    raw: { parsed, provider: result },
+  }
 }

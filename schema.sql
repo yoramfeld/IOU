@@ -109,14 +109,12 @@ create table receipts (
   raw_ocr_json          jsonb,
   parsed_total          numeric(10,2),
   direction             text not null default 'ltr',
-  ocr_status            text not null default 'ok',
+  ocr_status            text not null default 'pending',
   created_at            timestamptz not null default now()
 );
 
--- Parsed line items (as edited/confirmed by the entering member before submit).
--- y_center_pct (0-100) is the item's vertical position on the receipt image, used to
--- align each member's review checkbox next to the actual line in ReviewReceiptModal.
--- Null when the position is unknown (e.g. a row added manually, not from OCR).
+-- Parsed line items extracted asynchronously from the receipt image.
+-- y_center_pct is retained for older rows but the review UI no longer depends on it.
 create table receipt_items (
   id            uuid primary key default uuid_generate_v4(),
   receipt_id    uuid not null references receipts(id) on delete cascade,
